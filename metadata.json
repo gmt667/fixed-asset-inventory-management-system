@@ -1,0 +1,6 @@
+{
+  "name": "Fixed Asset Inventory Management System",
+  "description": "Enterprise-grade web application for centralized tracking, verification, transfer, maintenance, and disposal of organizational assets with Role-Based Access Control and analytics.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
