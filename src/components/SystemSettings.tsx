@@ -247,23 +247,293 @@ export default function SystemSettingsComponent({ userRole, currentUserId, focus
       if (prog >= 100) {
         clearInterval(interval);
         
-        // Finalize Download trigger with the ACTUAL DB DATA in SQL structure block!
-        const sqlContent = `-- FAIMS System DB Backup
--- Giant Plus Limited
+        const escapeSQL = (val: any) => {
+          if (val === null || val === undefined) return "NULL";
+          if (typeof val === "number") return String(val);
+          if (typeof val === "boolean") return val ? "TRUE" : "FALSE";
+          const str = String(val).replace(/'/g, "''");
+          return `'${str}'`;
+        };
+
+        let sqlContent = `-- FAIMS System DB Backup
+-- Organization: ${db.settings.orgName || "Fixed Asset Management System"}
 -- Date: ${new Date().toISOString()}
+-- Dynamic backup generation containing all tables
 
-CREATE TABLE IF NOT EXISTS categories (id VARCHAR(50), name VARCHAR(100), code VARCHAR(50));
-INSERT INTO categories VALUES ${db.categories.map(c => `('${c.id}', '${c.name}', '${c.code}')`).join(",\n")};
-
-CREATE TABLE IF NOT EXISTS departments (id VARCHAR(50), name VARCHAR(100), code VARCHAR(50));
-INSERT INTO departments VALUES ${db.departments.map(d => `('${d.id}', '${d.name}', '${d.code}')`).join(",\n")};
-
-CREATE TABLE IF NOT EXISTS locations (id VARCHAR(50), name VARCHAR(100), code VARCHAR(50));
-INSERT INTO locations VALUES ${db.locations.map(l => `('${l.id}', '${l.name}', '${l.code}')`).join(",\n")};
-
-CREATE TABLE IF NOT EXISTS assets (id VARCHAR(50), tag VARCHAR(50), name VARCHAR(100), cost DECIMAL(10,2));
-INSERT INTO assets VALUES ${db.assets.map(a => `('${a.id}', '${a.assetTag}', '${a.name.replace(/'/g, "''")}', ${a.purchaseCost})`).join(",\n")};
 `;
+
+        // 1. Categories
+        sqlContent += `CREATE TABLE IF NOT EXISTS categories (
+  id VARCHAR(50) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  code VARCHAR(50) NOT NULL,
+  serviceIntervalDays INT
+);\n`;
+        if (db.categories && db.categories.length > 0) {
+          sqlContent += `INSERT INTO categories (id, name, code, serviceIntervalDays) VALUES\n`;
+          sqlContent += db.categories.map(c => `(${escapeSQL(c.id)}, ${escapeSQL(c.name)}, ${escapeSQL(c.code)}, ${escapeSQL(c.serviceIntervalDays)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for categories\n\n`;
+        }
+
+        // 2. Departments
+        sqlContent += `CREATE TABLE IF NOT EXISTS departments (
+  id VARCHAR(50) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  code VARCHAR(50) NOT NULL
+);\n`;
+        if (db.departments && db.departments.length > 0) {
+          sqlContent += `INSERT INTO departments (id, name, code) VALUES\n`;
+          sqlContent += db.departments.map(d => `(${escapeSQL(d.id)}, ${escapeSQL(d.name)}, ${escapeSQL(d.code)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for departments\n\n`;
+        }
+
+        // 3. Locations
+        sqlContent += `CREATE TABLE IF NOT EXISTS locations (
+  id VARCHAR(50) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  code VARCHAR(50) NOT NULL
+);\n`;
+        if (db.locations && db.locations.length > 0) {
+          sqlContent += `INSERT INTO locations (id, name, code) VALUES\n`;
+          sqlContent += db.locations.map(l => `(${escapeSQL(l.id)}, ${escapeSQL(l.name)}, ${escapeSQL(l.code)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for locations\n\n`;
+        }
+
+        // 4. Suppliers
+        sqlContent += `CREATE TABLE IF NOT EXISTS suppliers (
+  id VARCHAR(50) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  contactPerson VARCHAR(100),
+  email VARCHAR(100),
+  phone VARCHAR(50),
+  address TEXT
+);\n`;
+        if (db.suppliers && db.suppliers.length > 0) {
+          sqlContent += `INSERT INTO suppliers (id, name, contactPerson, email, phone, address) VALUES\n`;
+          sqlContent += db.suppliers.map(s => `(${escapeSQL(s.id)}, ${escapeSQL(s.name)}, ${escapeSQL(s.contactPerson)}, ${escapeSQL(s.email)}, ${escapeSQL(s.phone)}, ${escapeSQL(s.address)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for suppliers\n\n`;
+        }
+
+        // 5. Users
+        sqlContent += `CREATE TABLE IF NOT EXISTS users (
+  id VARCHAR(50) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  email VARCHAR(100) NOT NULL,
+  role VARCHAR(50) NOT NULL,
+  departmentId VARCHAR(50),
+  phone VARCHAR(50),
+  bio TEXT,
+  createdAt VARCHAR(50)
+);\n`;
+        if (db.users && db.users.length > 0) {
+          sqlContent += `INSERT INTO users (id, name, email, role, departmentId, phone, bio, createdAt) VALUES\n`;
+          sqlContent += db.users.map(u => `(${escapeSQL(u.id)}, ${escapeSQL(u.name)}, ${escapeSQL(u.email)}, ${escapeSQL(u.role)}, ${escapeSQL(u.departmentId)}, ${escapeSQL(u.phone)}, ${escapeSQL(u.bio)}, ${escapeSQL(u.createdAt)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for users\n\n`;
+        }
+
+        // 6. Clients
+        sqlContent += `CREATE TABLE IF NOT EXISTS clients (
+  id VARCHAR(50) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  code VARCHAR(50) NOT NULL,
+  contactPerson VARCHAR(100),
+  phone VARCHAR(50),
+  email VARCHAR(100),
+  address TEXT,
+  organizationType VARCHAR(100),
+  district VARCHAR(100),
+  region VARCHAR(100),
+  status VARCHAR(50),
+  registrationDate VARCHAR(50)
+);\n`;
+        if (db.clients && db.clients.length > 0) {
+          sqlContent += `INSERT INTO clients (id, name, code, contactPerson, phone, email, address, organizationType, district, region, status, registrationDate) VALUES\n`;
+          sqlContent += db.clients.map(c => `(${escapeSQL(c.id)}, ${escapeSQL(c.name)}, ${escapeSQL(c.code)}, ${escapeSQL(c.contactPerson)}, ${escapeSQL(c.phone)}, ${escapeSQL(c.email)}, ${escapeSQL(c.address)}, ${escapeSQL(c.organizationType)}, ${escapeSQL(c.district)}, ${escapeSQL(c.region)}, ${escapeSQL(c.status)}, ${escapeSQL(c.registrationDate)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for clients\n\n`;
+        }
+
+        // 7. Assets
+        sqlContent += `CREATE TABLE IF NOT EXISTS assets (
+  id VARCHAR(50) PRIMARY KEY,
+  assetTag VARCHAR(50) NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  clientId VARCHAR(50),
+  categoryId VARCHAR(50),
+  departmentId VARCHAR(50),
+  locationId VARCHAR(50),
+  supplierId VARCHAR(50),
+  purchaseDate VARCHAR(50),
+  purchaseCost DECIMAL(15,2),
+  serialNumber VARCHAR(100),
+  warrantyExpiry VARCHAR(50),
+  condition VARCHAR(50),
+  status VARCHAR(50),
+  assignedUserId VARCHAR(50),
+  notes TEXT,
+  qrCode TEXT
+);\n`;
+        if (db.assets && db.assets.length > 0) {
+          sqlContent += `INSERT INTO assets (id, assetTag, name, clientId, categoryId, departmentId, locationId, supplierId, purchaseDate, purchaseCost, serialNumber, warrantyExpiry, condition, status, assignedUserId, notes, qrCode) VALUES\n`;
+          sqlContent += db.assets.map(a => `(${escapeSQL(a.id)}, ${escapeSQL(a.assetTag)}, ${escapeSQL(a.name)}, ${escapeSQL(a.clientId)}, ${escapeSQL(a.categoryId)}, ${escapeSQL(a.departmentId)}, ${escapeSQL(a.locationId)}, ${escapeSQL(a.supplierId)}, ${escapeSQL(a.purchaseDate)}, ${escapeSQL(a.purchaseCost)}, ${escapeSQL(a.serialNumber)}, ${escapeSQL(a.warrantyExpiry)}, ${escapeSQL(a.condition)}, ${escapeSQL(a.status)}, ${escapeSQL(a.assignedUserId)}, ${escapeSQL(a.notes)}, ${escapeSQL(a.qrCode)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for assets\n\n`;
+        }
+
+        // 8. Assignments
+        sqlContent += `CREATE TABLE IF NOT EXISTS assignments (
+  id VARCHAR(50) PRIMARY KEY,
+  assetId VARCHAR(50) NOT NULL,
+  userId VARCHAR(50) NOT NULL,
+  departmentId VARCHAR(50) NOT NULL,
+  assignedDate VARCHAR(50) NOT NULL,
+  returnDate VARCHAR(50),
+  status VARCHAR(50),
+  remarks TEXT
+);\n`;
+        if (db.assignments && db.assignments.length > 0) {
+          sqlContent += `INSERT INTO assignments (id, assetId, userId, departmentId, assignedDate, returnDate, status, remarks) VALUES\n`;
+          sqlContent += db.assignments.map(asg => `(${escapeSQL(asg.id)}, ${escapeSQL(asg.assetId)}, ${escapeSQL(asg.userId)}, ${escapeSQL(asg.departmentId)}, ${escapeSQL(asg.assignedDate)}, ${escapeSQL(asg.returnDate)}, ${escapeSQL(asg.status)}, ${escapeSQL(asg.remarks)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for assignments\n\n`;
+        }
+
+        // 9. Transfers
+        sqlContent += `CREATE TABLE IF NOT EXISTS transfers (
+  id VARCHAR(50) PRIMARY KEY,
+  assetId VARCHAR(50) NOT NULL,
+  sourceDepartmentId VARCHAR(50),
+  destDepartmentId VARCHAR(50),
+  sourceLocationId VARCHAR(50),
+  destLocationId VARCHAR(50),
+  status VARCHAR(50),
+  transferDate VARCHAR(50),
+  authorizedBy VARCHAR(100),
+  remarks TEXT
+);\n`;
+        if (db.transfers && db.transfers.length > 0) {
+          sqlContent += `INSERT INTO transfers (id, assetId, sourceDepartmentId, destDepartmentId, sourceLocationId, destLocationId, status, transferDate, authorizedBy, remarks) VALUES\n`;
+          sqlContent += db.transfers.map(t => `(${escapeSQL(t.id)}, ${escapeSQL(t.assetId)}, ${escapeSQL(t.sourceDepartmentId)}, ${escapeSQL(t.destDepartmentId)}, ${escapeSQL(t.sourceLocationId)}, ${escapeSQL(t.destLocationId)}, ${escapeSQL(t.status)}, ${escapeSQL(t.transferDate)}, ${escapeSQL(t.authorizedBy)}, ${escapeSQL(t.remarks)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for transfers\n\n`;
+        }
+
+        // 10. Maintenance
+        sqlContent += `CREATE TABLE IF NOT EXISTS maintenance (
+  id VARCHAR(50) PRIMARY KEY,
+  assetId VARCHAR(50) NOT NULL,
+  requestBy VARCHAR(100),
+  technician VARCHAR(100),
+  serviceProvider VARCHAR(100),
+  cost DECIMAL(15,2),
+  maintenanceDate VARCHAR(50),
+  completionDate VARCHAR(50),
+  notes TEXT,
+  status VARCHAR(50)
+);\n`;
+        if (db.maintenance && db.maintenance.length > 0) {
+          sqlContent += `INSERT INTO maintenance (id, assetId, requestBy, technician, serviceProvider, cost, maintenanceDate, completionDate, notes, status) VALUES\n`;
+          sqlContent += db.maintenance.map(m => `(${escapeSQL(m.id)}, ${escapeSQL(m.assetId)}, ${escapeSQL(m.requestBy)}, ${escapeSQL(m.technician)}, ${escapeSQL(m.serviceProvider)}, ${escapeSQL(m.cost)}, ${escapeSQL(m.maintenanceDate)}, ${escapeSQL(m.completionDate)}, ${escapeSQL(m.notes)}, ${escapeSQL(m.status)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for maintenance\n\n`;
+        }
+
+        // 11. Verifications
+        sqlContent += `CREATE TABLE IF NOT EXISTS verifications (
+  id VARCHAR(50) PRIMARY KEY,
+  assetId VARCHAR(50) NOT NULL,
+  verificationDate VARCHAR(50) NOT NULL,
+  verifiedBy VARCHAR(100) NOT NULL,
+  status VARCHAR(50),
+  condition VARCHAR(50),
+  result VARCHAR(50),
+  notes TEXT
+);\n`;
+        if (db.verifications && db.verifications.length > 0) {
+          sqlContent += `INSERT INTO verifications (id, assetId, verificationDate, verifiedBy, status, condition, result, notes) VALUES\n`;
+          sqlContent += db.verifications.map(v => `(${escapeSQL(v.id)}, ${escapeSQL(v.assetId)}, ${escapeSQL(v.verificationDate)}, ${escapeSQL(v.verifiedBy)}, ${escapeSQL(v.status)}, ${escapeSQL(v.condition)}, ${escapeSQL(v.result)}, ${escapeSQL(v.notes)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for verifications\n\n`;
+        }
+
+        // 12. Disposals
+        sqlContent += `CREATE TABLE IF NOT EXISTS disposals (
+  id VARCHAR(50) PRIMARY KEY,
+  assetId VARCHAR(50) NOT NULL,
+  disposalDate VARCHAR(50) NOT NULL,
+  method VARCHAR(50),
+  reason TEXT,
+  authorizedBy VARCHAR(100),
+  supportingDocuments TEXT
+);\n`;
+        if (db.disposals && db.disposals.length > 0) {
+          sqlContent += `INSERT INTO disposals (id, assetId, disposalDate, method, reason, authorizedBy, supportingDocuments) VALUES\n`;
+          sqlContent += db.disposals.map(disp => `(${escapeSQL(disp.id)}, ${escapeSQL(disp.assetId)}, ${escapeSQL(disp.disposalDate)}, ${escapeSQL(disp.method)}, ${escapeSQL(disp.reason)}, ${escapeSQL(disp.authorizedBy)}, ${escapeSQL(disp.supportingDocuments)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for disposals\n\n`;
+        }
+
+        // 13. Audit Logs
+        sqlContent += `CREATE TABLE IF NOT EXISTS audit_logs (
+  id VARCHAR(50) PRIMARY KEY,
+  userId VARCHAR(50),
+  userName VARCHAR(100),
+  action VARCHAR(100),
+  details TEXT,
+  timestamp VARCHAR(50),
+  ipAddress VARCHAR(50)
+);\n`;
+        if (db.auditLogs && db.auditLogs.length > 0) {
+          sqlContent += `INSERT INTO audit_logs (id, userId, userName, action, details, timestamp, ipAddress) VALUES\n`;
+          sqlContent += db.auditLogs.map(l => `(${escapeSQL(l.id)}, ${escapeSQL(l.userId)}, ${escapeSQL(l.userName)}, ${escapeSQL(l.action)}, ${escapeSQL(l.details)}, ${escapeSQL(l.timestamp)}, ${escapeSQL(l.ipAddress)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for audit logs\n\n`;
+        }
+
+        // 14. Reminders
+        sqlContent += `CREATE TABLE IF NOT EXISTS reminders (
+  id VARCHAR(50) PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  category VARCHAR(100),
+  dueDate VARCHAR(50) NOT NULL,
+  recurrence VARCHAR(50),
+  assignedTo VARCHAR(100),
+  status VARCHAR(50),
+  amount DECIMAL(15,2),
+  notes TEXT,
+  createdAt VARCHAR(50),
+  updatedAt VARCHAR(50)
+);\n`;
+        if (db.reminders && db.reminders.length > 0) {
+          sqlContent += `INSERT INTO reminders (id, title, category, dueDate, recurrence, assignedTo, status, amount, notes, createdAt, updatedAt) VALUES\n`;
+          sqlContent += db.reminders.map(rem => `(${escapeSQL(rem.id)}, ${escapeSQL(rem.title)}, ${escapeSQL(rem.category)}, ${escapeSQL(rem.dueDate)}, ${escapeSQL(rem.recurrence)}, ${escapeSQL(rem.assignedTo)}, ${escapeSQL(rem.status)}, ${escapeSQL(rem.amount)}, ${escapeSQL(rem.notes)}, ${escapeSQL(rem.createdAt)}, ${escapeSQL(rem.updatedAt)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for reminders\n\n`;
+        }
+
+        // 15. Notifications
+        sqlContent += `CREATE TABLE IF NOT EXISTS notifications (
+  id VARCHAR(50) PRIMARY KEY,
+  userId VARCHAR(50),
+  reminderId VARCHAR(50),
+  title VARCHAR(200) NOT NULL,
+  message TEXT,
+  isRead BOOLEAN,
+  createdAt VARCHAR(50),
+  readAt VARCHAR(50),
+  type VARCHAR(50)
+);\n`;
+        if (db.notifications && db.notifications.length > 0) {
+          sqlContent += `INSERT INTO notifications (id, userId, reminderId, title, message, isRead, createdAt, readAt, type) VALUES\n`;
+          sqlContent += db.notifications.map(n => `(${escapeSQL(n.id)}, ${escapeSQL(n.userId)}, ${escapeSQL(n.reminderId)}, ${escapeSQL(n.title)}, ${escapeSQL(n.message)}, ${escapeSQL(n.isRead)}, ${escapeSQL(n.createdAt)}, ${escapeSQL(n.readAt)}, ${escapeSQL(n.type)})`).join(",\n") + ";\n\n";
+        } else {
+          sqlContent += `-- No records for notifications\n\n`;
+        }
 
         const blob = new Blob([sqlContent], { type: "text/sql" });
         const link = document.createElement("a");

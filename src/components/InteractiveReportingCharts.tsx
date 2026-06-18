@@ -43,13 +43,14 @@ export default function InteractiveReportingCharts({ assets, maintenance }: Inte
 
   // Helper to calculate asset remaining book value consistent with depreciation curves
   const getAssetFinancials = (asset: Asset) => {
-    const parts = (asset.purchaseDate || "2026-01-01").split("-");
-    const pYear = parseInt(parts[0], 10) || 2026;
+    const parts = (asset.purchaseDate || new Date().toISOString().slice(0, 10)).split("-");
+    const pYear = parseInt(parts[0], 10) || new Date().getFullYear();
     const pMonth = parseInt(parts[1], 10) || 1;
     const purchaseBookVal = pYear * 12 + (pMonth - 1);
 
-    const targetYear = 2026;
-    const targetMonth = 5; // June is index 5
+    const now = new Date();
+    const targetYear = now.getFullYear();
+    const targetMonth = now.getMonth(); // 0-indexed: matches how we compute purchaseBookVal
     const targetTotalVal = targetYear * 12 + targetMonth;
 
     const elapsedMonths = Math.max(0, targetTotalVal - purchaseBookVal);
@@ -192,14 +193,18 @@ export default function InteractiveReportingCharts({ assets, maintenance }: Inte
     };
   }, [selectedHeatmapCell, heatmapGridData]);
 
-  // Time Series calculation: July 2025 to June 2026 based on DB parameters
+  // Time Series calculation: Rolling 12-month window ending at current month
   const chartData = useMemo<MonthData[]>(() => {
     const months: MonthData[] = [];
-    const startYear = 2025;
-    const startMonthIndex = 6; // July (0-indexed in our month list)
+    const now = new Date();
+    // Start 11 months ago so current month is always the last column
+    const endYear = now.getFullYear();
+    const endMonth = now.getMonth(); // 0-indexed
+    const endTotalMonths = endYear * 12 + endMonth;
+    const startTotalMonths = endTotalMonths - 11; // 12 months window
 
     for (let i = 0; i < 12; i++) {
-      const totalMonthCount = startYear * 12 + startMonthIndex + i;
+      const totalMonthCount = startTotalMonths + i;
       const year = Math.floor(totalMonthCount / 12);
       const mNum = (totalMonthCount % 12) + 1;
       const key = `${year}-${String(mNum).padStart(2, "0")}`;
