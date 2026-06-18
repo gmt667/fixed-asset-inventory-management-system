@@ -244,14 +244,66 @@ export interface AuditLog {
   ipAddress: string;
 }
 
+export type ReminderCategory =
+  | "Internet Bundle Renewals"
+  | "Office Rent Payments"
+  | "Electricity Bills"
+  | "Water Bills"
+  | "Domain Renewals"
+  | "Hosting Renewals"
+  | "Software License Renewals"
+  | "Vehicle Insurance"
+  | "Equipment Maintenance"
+  | "Asset Verification"
+  | "Contract Renewals"
+  | "Supplier Payments"
+  | "Tax Deadlines"
+  | "Staff Meetings"
+  | "Custom Tasks";
+
+export type ReminderRecurrence = "None" | "Daily" | "Weekly" | "Monthly" | "Quarterly" | "Semi-Annual" | "Annual";
+
+export type ReminderStatus = "Active" | "Completed" | "Snoozed" | "Cancelled";
+
+export interface Reminder {
+  id: string;
+  title: string;
+  category: ReminderCategory;
+  dueDate: string;
+  recurrence: ReminderRecurrence;
+  assignedTo: string;
+  status: ReminderStatus;
+  amount?: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  snoozedUntil?: string;
+  parentReminderId?: string;
+  nextOccurrenceGenerated?: boolean;
+}
+
 export interface Notification {
   id: string;
   userId: string; // "all" or specific User.id
+  reminderId?: string;
   title: string;
   message: string;
   isRead: boolean;
   createdAt: string;
+  sentAt?: string;
+  readAt?: string;
+  status?: "pending" | "sent" | "failed";
+  channel?: "in-app" | "dashboard" | "email" | "push" | "sms";
+  deliveryKey?: string;
   type: "info" | "warning" | "success" | "error";
+}
+
+export interface NotificationPreference {
+  userId: string;
+  emailEnabled: boolean;
+  pushEnabled: boolean;
+  smsEnabled: boolean;
 }
 
 export interface SystemSettings {
@@ -275,6 +327,7 @@ export interface SystemSettings {
   dateFormat?: string;
   country?: string;
   phoneFormat?: string;
+  reminderIntervals?: number[];
   companySlogan?: string;
   companyDescription?: string;
   socialLinks?: {

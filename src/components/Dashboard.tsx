@@ -184,6 +184,36 @@ export default function Dashboard({ onNavigate, userRole, onSelectAsset, current
   const unreadSecurityEvents = db.auditLogs.filter(log => /security|password|credential|login/i.test(`${log.action} ${log.details}`)).length;
   const visibleNotifications = db.notifications.filter(notification => notification.userId === "all" || notification.userId === currentUser.id);
   const unreadNotifications = visibleNotifications.filter(notification => !notification.isRead).length;
+  const visibleReminders = db.reminders.filter(reminder => {
+    if (reminder.status === "Cancelled" || reminder.status === "Completed") return false;
+    if (reminder.assignedTo === "all") return true;
+    if (reminder.assignedTo === currentUser.id) return true;
+    return userRole === UserRole.ADMIN || userRole === UserRole.ASSET_MANAGER;
+  });
+  const todayKey = new Date().toISOString().split("T")[0];
+  const monthKey = todayKey.slice(0, 7);
+  const paymentCategories = new Set([
+    "Internet Bundle Renewals",
+    "Office Rent Payments",
+    "Electricity Bills",
+    "Water Bills",
+    "Domain Renewals",
+    "Hosting Renewals",
+    "Software License Renewals",
+    "Vehicle Insurance",
+    "Contract Renewals",
+    "Supplier Payments",
+    "Tax Deadlines"
+  ]);
+  const todaysTasks = visibleReminders.filter(reminder => reminder.dueDate === todayKey);
+  const overdueReminders = visibleReminders.filter(reminder => reminder.dueDate < todayKey);
+  const upcomingPayments = visibleReminders
+    .filter(reminder => paymentCategories.has(reminder.category) && reminder.dueDate >= todayKey)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    .slice(0, 5);
+  const monthObligations = visibleReminders
+    .filter(reminder => reminder.dueDate.slice(0, 7) === monthKey)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const completedMaintenance = db.maintenance.filter(record => record.status === "Completed").length;
   const openMaintenanceForRole = db.maintenance.filter(record =>
     (record.status === "Pending" || record.status === "In Progress") &&
@@ -369,6 +399,78 @@ export default function Dashboard({ onNavigate, userRole, onSelectAsset, current
           <strong>{roleAssets.length}</strong>
           <small>visible assets</small>
         </div>
+      </section>
+
+      <section className="grid grid-cols-1 xl:grid-cols-4 gap-5">
+        <article className="erp-panel">
+          <div className="erp-panel-header">
+            <div>
+              <h2>Today's Tasks</h2>
+              <p>Due today from the reminder engine.</p>
+            </div>
+            <Bell className="w-5 h-5" />
+          </div>
+          <div className="erp-workspace-list">
+            {todaysTasks.length === 0 ? (
+              <div><span>No tasks due today</span><strong>0</strong></div>
+            ) : todaysTasks.slice(0, 4).map(reminder => (
+              <div key={reminder.id}><span>{reminder.title}</span><strong>{formatDate(reminder.dueDate)}</strong></div>
+            ))}
+          </div>
+        </article>
+
+        <article className="erp-panel">
+          <div className="erp-panel-header">
+            <div>
+              <h2>Upcoming Payments</h2>
+              <p>Renewals and payable obligations.</p>
+            </div>
+            <Briefcase className="w-5 h-5" />
+          </div>
+          <div className="erp-workspace-list">
+            {upcomingPayments.length === 0 ? (
+              <div><span>No upcoming payments</span><strong>0</strong></div>
+            ) : upcomingPayments.map(reminder => (
+              <div key={reminder.id}>
+                <span>{reminder.title}</span>
+                <strong>{reminder.amount ? formatCurrency(reminder.amount) : formatDate(reminder.dueDate)}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="erp-panel">
+          <div className="erp-panel-header">
+            <div>
+              <h2>Overdue Items</h2>
+              <p>Daily alerts continue until resolved.</p>
+            </div>
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div className="erp-workspace-list">
+            {overdueReminders.length === 0 ? (
+              <div><span>No overdue reminders</span><strong>0</strong></div>
+            ) : overdueReminders.slice(0, 4).map(reminder => (
+              <div key={reminder.id}><span>{reminder.title}</span><strong>{formatDate(reminder.dueDate)}</strong></div>
+            ))}
+          </div>
+        </article>
+
+        <article className="erp-panel">
+          <div className="erp-panel-header">
+            <div>
+              <h2>This Month's Obligations</h2>
+              <p>All reminder records due this month.</p>
+            </div>
+            <ClipboardCheck className="w-5 h-5" />
+          </div>
+          <div className="erp-workspace-list">
+            <div><span>Total obligations</span><strong>{monthObligations.length}</strong></div>
+            <div><span>Open reminders</span><strong>{visibleReminders.length}</strong></div>
+            <div><span>Unread reminder alerts</span><strong>{visibleNotifications.filter(item => item.reminderId && !item.isRead).length}</strong></div>
+            <div><span>Overdue reminders</span><strong>{overdueReminders.length}</strong></div>
+          </div>
+        </article>
       </section>
 
       {/* Subtab conditional rendering */}
@@ -844,7 +946,7 @@ export default function Dashboard({ onNavigate, userRole, onSelectAsset, current
               <div className="erp-workspace-list">
                 <div><span>Security alerts flag</span><strong>{unreadSecurityEvents} unread</strong></div>
                 <div><span>Total logs events</span><strong>{db.auditLogs.length} entries</strong></div>
-                <div><span>Current session IP</span><strong>192.168.10.12 (secure)</strong></div>
+                <div><span>Current session source</span><strong>{currentUser.activeSessions?.[0]?.ip || "client-unavailable"}</strong></div>
                 <div><span>Active sessions</span><strong>{activeSessions} logged in</strong></div>
               </div>
             </article>

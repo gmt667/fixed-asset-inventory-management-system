@@ -38,7 +38,21 @@ import {
   ShieldCheck,
   Menu
 } from "lucide-react";
-import { getDatabaseState, saveDatabaseState, addAuditRecord, isOffline, setOfflineMode, getOfflineBufferLengths, syncOfflineData, checkAndAutoTriggerMaintenance } from "./db";
+import {
+  getDatabaseState,
+  saveDatabaseState,
+  addAuditRecord,
+  isOffline,
+  setOfflineMode,
+  getOfflineBufferLengths,
+  syncOfflineData,
+  checkAndAutoTriggerMaintenance,
+  startReminderScheduler,
+  runReminderEngine,
+  completeReminder,
+  snoozeReminder,
+  formatDate
+} from "./db";
 import { User, UserRole } from "./types";
 
 // Import modules
@@ -56,6 +70,7 @@ import AuditLogs from "./components/AuditLogs";
 import SystemSettingsComponent from "./components/SystemSettings";
 import ProfileComponent from "./components/Profile";
 import ClientsManagement from "./components/ClientsManagement";
+import ReminderManagement from "./components/ReminderManagement";
 
 type Tab =
   | "Dashboard"
@@ -92,6 +107,12 @@ export default function App() {
     } catch (e) {
       console.error("Auto-trigger maintenance check failed: ", e);
     }
+  }, []);
+
+  React.useEffect(() => {
+    const stopReminderScheduler = startReminderScheduler();
+    refreshDatabase();
+    return stopReminderScheduler;
   }, []);
 
   React.useEffect(() => {
@@ -195,7 +216,7 @@ export default function App() {
   const [pendingChangeUser, setPendingChangeUser] = useState<User | null>(null);
 
   // Expanded Notification Center support
-  const [notifFilter, setNotifFilter] = useState<"all" | "unread" | "warning" | "assignment" | "system" | "security">("all");
+  const [notifFilter, setNotifFilter] = useState<"all" | "unread" | "warning" | "reminder" | "assignment" | "system" | "security">("all");
 
   // Active tab selection
   const [activeTab, setActiveTab] = useState<Tab>("Dashboard");
@@ -312,14 +333,14 @@ export default function App() {
       localStorage.removeItem("faims_remember_me");
     }
 
-    // Push dynamic session object to user activeSessions array
-    const cleanSessionDevice = "Web Browser Terminal (Secured Node)";
-    const cleanSessionIP = `192.168.10.${Math.floor(Math.random() * 200) + 10}`;
+    // Push browser session metadata available to the client runtime.
+    const cleanSessionDevice = typeof navigator !== "undefined" ? navigator.platform || "Browser Client" : "Browser Client";
+    const cleanSessionIP = "client-unavailable";
     const cleanSession = {
       id: `sess-${Date.now()}`,
       loginTime: new Date().toISOString(),
       device: cleanSessionDevice,
-      browser: "Chrome Secure Core",
+      browser: typeof navigator !== "undefined" ? navigator.userAgent : "Browser",
       ip: cleanSessionIP
     };
 
@@ -335,7 +356,7 @@ export default function App() {
         timestamp: new Date().toISOString(),
         event: "User Authenticated Portal Sign-In",
         device: cleanSessionDevice,
-        browser: "Chrome Secure Core",
+        browser: typeof navigator !== "undefined" ? navigator.userAgent : "Browser",
         ip: cleanSessionIP,
         status: "success"
       });
@@ -355,8 +376,10 @@ export default function App() {
       return;
     }
 
+    runReminderEngine();
     setCurrentUser(foundUser);
     addAuditRecord(foundUser.id, foundUser.name, "Login Successful", `User authenticated into session under permission level: ${foundUser.role}`);
+    refreshDatabase();
   };
 
   // Forgot Password handler
@@ -630,6 +653,7 @@ export default function App() {
         { id: "Departments", name: "Departments", icon: <Building2 className="w-4 h-4" />, roles: [UserRole.ADMIN], description: "Manage corporate divisions and department profiles." },
         { id: "Locations", name: "Locations", icon: <Building className="w-4 h-4" />, roles: [UserRole.ADMIN], description: "Configure physical sites, rooms, and office buildings." },
         { id: "Categories", name: "Categories", icon: <FolderTree className="w-4 h-4" />, roles: [UserRole.ADMIN], description: "Manage asset types and classification categories." },
+        { id: "ReminderEngine", name: "Reminder Engine", icon: <Bell className="w-4 h-4" />, roles: [UserRole.ADMIN], description: "Create automated obligations, renewals, payments, and task reminders." },
         { id: "SystemConfigurations", name: "System Configurations", icon: <Settings className="w-4 h-4" />, roles: [UserRole.ADMIN], description: "Global settings for organization name and branding." }
       ]
     },
@@ -822,6 +846,7 @@ export default function App() {
     return allNotifications.filter(n => {
       if (notifFilter === "unread") return !n.isRead;
       if (notifFilter === "warning") return n.type === "warning" || n.type === "error";
+      if (notifFilter === "reminder") return Boolean(n.reminderId) || n.title.toLowerCase().includes("due") || n.title.toLowerCase().includes("overdue");
       if (notifFilter === "assignment") {
         const titleL = n.title.toLowerCase();
         const msgL = n.message.toLowerCase();
@@ -848,6 +873,16 @@ export default function App() {
     const idx = currentDB.notifications.findIndex(n => n.id === notifId);
     if (idx !== -1) {
       currentDB.notifications[idx].isRead = true;
+      currentDB.notifications[idx].readAt = new Date().toISOString();
+      currentDB.auditLogs.unshift({
+        id: `log-notification-read-${Date.now()}`,
+        userId: currentUser?.id || "System",
+        userName: currentUser?.name || "System",
+        action: "Notification Read",
+        details: `Notification '${currentDB.notifications[idx].title}' marked as read.`,
+        timestamp: new Date().toISOString(),
+        ipAddress: "client-unavailable"
+      });
       saveDatabaseState(currentDB);
       refreshDatabase();
     }
@@ -865,9 +900,31 @@ export default function App() {
     currentDB.notifications.forEach(n => {
       if (n.userId === "all" || n.userId === currentUser?.id) {
         n.isRead = true;
+        n.readAt = n.readAt || new Date().toISOString();
       }
     });
+    currentDB.auditLogs.unshift({
+      id: `log-notification-read-all-${Date.now()}`,
+      userId: currentUser?.id || "System",
+      userName: currentUser?.name || "System",
+      action: "Notification Read",
+      details: "All visible notifications marked as read.",
+      timestamp: new Date().toISOString(),
+      ipAddress: "client-unavailable"
+    });
     saveDatabaseState(currentDB);
+    refreshDatabase();
+  };
+
+  const handleSnoozeNotificationReminder = (reminderId: string, days: number) => {
+    if (!currentUser) return;
+    snoozeReminder(reminderId, days, currentUser.id, currentUser.name);
+    refreshDatabase();
+  };
+
+  const handleCompleteNotificationReminder = (reminderId: string) => {
+    if (!currentUser) return;
+    completeReminder(reminderId, currentUser.id, currentUser.name);
     refreshDatabase();
   };
 
@@ -1599,7 +1656,7 @@ export default function App() {
                   <div className={`flex p-1 gap-1 text-[9px] font-mono font-bold uppercase overflow-x-auto select-none border-b ${
                     isLight ? "bg-slate-100 border-slate-200" : "bg-[#161619] border-[#27272a]"
                   }`}>
-                    {["all", "unread", "warning", "assignment", "security", "system"].map(cat => (
+                    {["all", "unread", "reminder", "warning", "assignment", "security", "system"].map(cat => (
                       <button
                         key={cat}
                         onClick={() => setNotifFilter(cat as any)}
@@ -1652,10 +1709,26 @@ export default function App() {
                             {item.message}
                           </p>
                           <span className="text-[8px] text-zinc-500 font-mono mt-0.5 block font-medium">
-                            {item.timestamp}
+                            {formatDate(item.createdAt)} {item.status ? `- ${item.status}` : ""}
                           </span>
                           
                           <div className="flex items-center gap-2 mt-1.5 self-end opacity-90 group-hover:opacity-100 transition-all">
+                            {item.reminderId && (
+                              <>
+                                <button
+                                  onClick={() => handleSnoozeNotificationReminder(item.reminderId!, 1)}
+                                  className="text-[9.5px] text-amber-500 hover:text-amber-400 font-bold bg-amber-950/10 px-1.5 py-0.5 rounded border border-amber-900/20 cursor-pointer"
+                                >
+                                  Snooze
+                                </button>
+                                <button
+                                  onClick={() => handleCompleteNotificationReminder(item.reminderId!)}
+                                  className="text-[9.5px] text-blue-500 hover:text-blue-400 font-bold bg-blue-950/10 px-1.5 py-0.5 rounded border border-blue-900/20 cursor-pointer"
+                                >
+                                  Complete
+                                </button>
+                              </>
+                            )}
                             {!item.isRead && (
                               <button
                                 onClick={() => handleDismissNotification(item.id)}
@@ -1975,6 +2048,9 @@ export default function App() {
                     currentUserId={currentUser.id}
                     initialTab={adminTabMap[activeSub]}
                   />
+                )}
+                {activeSub === "ReminderEngine" && (
+                  <ReminderManagement userRole={currentUser.role} currentUserId={currentUser.id} />
                 )}
                 {activeSub === "SystemConfigurations" && (
                   <SystemSettingsComponent userRole={currentUser.role} currentUserId={currentUser.id} />

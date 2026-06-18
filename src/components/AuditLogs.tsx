@@ -264,7 +264,7 @@ export default function AuditLogs({ userRole, currentUserId }: AuditLogsProps) {
       action: "System Audits Purge",
       details: "Database history purged by executive action. Clearing completed.",
       timestamp: new Date().toISOString(),
-      ipAddress: "192.168.1.100"
+      ipAddress: "client-unavailable"
     };
 
     currentDB.auditLogs = [purgeRecord];

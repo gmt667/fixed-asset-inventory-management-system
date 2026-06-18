@@ -736,7 +736,7 @@ export default function ReportingModule({ userRole, currentUserId, initialReport
         <div>
           <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Capital Book Value</span>
           <h3 className="text-xl font-bold font-display text-slate-900 font-mono">
-            ${formatCurrency(valuationTotal)}
+            {formatCurrency(valuationTotal)}
           </h3>
         </div>
         <div className="md:border-l border-slate-100 md:pl-6">

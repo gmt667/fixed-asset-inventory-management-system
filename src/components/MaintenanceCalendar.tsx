@@ -522,8 +522,8 @@ export default function MaintenanceCalendar({ userRole, currentUserId, onStateCh
               const dayEvents = eventsByDate[cell.date] || [];
               const isSelected = cell.date === selectedDateStr;
               
-              // Baseline date 2026-06-09
-              const isToday = cell.date === "2026-06-09";
+              // Dynamic check for Today's date
+              const isToday = cell.date === new Date().toISOString().split("T")[0];
 
               return (
                 <div
@@ -596,7 +596,7 @@ export default function MaintenanceCalendar({ userRole, currentUserId, onStateCh
                 Selected date index: <strong className="font-mono text-slate-600">{selectedDateStr}</strong>
               </p>
             </div>
-            {selectedDateStr === "2026-06-09" && (
+            {selectedDateStr === new Date().toISOString().split("T")[0] && (
               <span className="bg-rose-500 text-white font-mono text-[9px] font-bold px-2 py-0.5 rounded-full animate-bounce">
                 Today
               </span>

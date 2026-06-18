@@ -376,8 +376,7 @@ export default function AssetManagement({
             if (!currentAsset) return;
 
             if (selectedGenStyle === "photo") {
-              // Catalog-style image generated deterministically from the asset tag.
-              finalImageValue = `https://picsum.photos/seed/${currentAsset.assetTag}-${currentAsset.categoryId}/400/400`;
+              finalImageValue = `catalog-${currentAsset.categoryId}`;
             } else if (selectedGenStyle === "blueprint") {
               finalImageValue = `blueprint-${currentAsset.categoryId}`;
             } else if (selectedGenStyle === "isometric") {
@@ -421,7 +420,7 @@ export default function AssetManagement({
     }, 600);
   };
   
-  // Interactive Simulation states for QR Code Scanner
+  // Interactive scanner lookup states for QR Code Scanner
   const [qrConsoleOpen, setQrConsoleOpen] = useState(false);
   const [scannerInput, setScannerInput] = useState("");
   const [isScanning, setIsScanning] = useState(false);
@@ -1212,7 +1211,7 @@ export default function AssetManagement({
     refreshDb();
   };
 
-  const simulateQRScan = (asset: Asset) => {
+  const openQrLookup = (asset: Asset) => {
     setQrConsoleOpen(true);
     setIsScanning(true);
     setScannerInput(asset.assetTag);
@@ -1636,7 +1635,7 @@ export default function AssetManagement({
 
                             <button
                               type="button"
-                              onClick={() => simulateQRScan(asset)}
+                              onClick={() => openQrLookup(asset)}
                               title="Interactive scan QR code"
                               className="p-1.5 bg-slate-800 hover:bg-slate-950 text-white rounded-lg cursor-pointer transition-colors"
                             >
@@ -2600,7 +2599,7 @@ export default function AssetManagement({
           </div>
         </div>
       )}
-            {/* Barcode / QR Scan Simulation & Real Device camera Modal Console */}
+      {/* Barcode / QR Scan and manual live-register lookup console */}
       {qrConsoleOpen && (
         <div className="fixed inset-0 z-50 overflow-hidden bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh] text-xs">
@@ -2610,7 +2609,7 @@ export default function AssetManagement({
                 <h3 className="text-base font-display font-semibold flex items-center gap-2">
                   <QrCode className="w-5 h-5 text-emerald-400 animate-pulse" /> FAIMS Optical Scanning Hub
                 </h3>
-                <p className="text-[10px] text-slate-300">Scan physical asset QR labels with camera or use manual dispatch simulator</p>
+                <p className="text-[10px] text-slate-300">Scan physical asset QR labels with camera or use live register lookup</p>
               </div>
               <button
                 onClick={() => {
@@ -2652,7 +2651,7 @@ export default function AssetManagement({
                       scanTab === "simulation" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-900"
                     }`}
                   >
-                    <Sliders className="w-3.5 h-3.5 text-emerald-600" /> Web Console Simulator
+                    <Sliders className="w-3.5 h-3.5 text-emerald-600" /> Register Lookup
                   </button>
                 </div>
               </div>
@@ -2754,7 +2753,7 @@ export default function AssetManagement({
                       )}
                     </div>
                   ) : (
-                    // CLASSIC SIMULATOR CODE
+                    // Manual lookup fallback when camera access is unavailable.
                     <div className="space-y-4">
                       {/* Digital Viewfinder Box */}
                       <div className="aspect-video bg-slate-950 rounded-xl relative overflow-hidden flex flex-col items-center justify-center p-4 text-center border-4 border-emerald-500/20">
@@ -2805,7 +2804,7 @@ export default function AssetManagement({
 
                         {/* Quick Seed tags checklist */}
                         <div className="space-y-1">
-                          <span className="text-[10px] text-slate-400 block font-semibold">Quick simulation selector:</span>
+                          <span className="text-[10px] text-slate-400 block font-semibold">Available register tags:</span>
                           <div className="flex flex-wrap gap-1.5">
                             {db.assets.map(a => (
                               <button

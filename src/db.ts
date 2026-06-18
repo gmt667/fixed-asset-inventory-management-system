@@ -19,6 +19,8 @@ import {
   DisposalRecord,
   AuditLog,
   Notification,
+  NotificationPreference,
+  Reminder,
   SystemSettings,
   AssetStatus,
   AssetCondition,
@@ -44,7 +46,9 @@ export interface DBState {
   verifications: VerificationRecord[];
   disposals: DisposalRecord[];
   auditLogs: AuditLog[];
+  reminders: Reminder[];
   notifications: Notification[];
+  notificationPreferences: NotificationPreference[];
   settings: SystemSettings;
 }
 
@@ -520,6 +524,13 @@ const defaultNotifications: Notification[] = [
   }
 ];
 
+const defaultNotificationPreferences: NotificationPreference[] = defaultUsers.map(user => ({
+  userId: user.id,
+  emailEnabled: user.preferences?.emailNotif ?? true,
+  pushEnabled: user.preferences?.desktopNotif ?? true,
+  smsEnabled: false
+}));
+
 const defaultSettings: SystemSettings = {
   orgName: "FAIMS Malawi Asset Management System",
   logo: "FA",
@@ -528,6 +539,7 @@ const defaultSettings: SystemSettings = {
   emailPort: "587",
   emailSender: "noreply@faims.local",
   isNotificationsEnabled: true,
+  reminderIntervals: [30, 14, 7, 3, 1, 0],
   backupFrequency: "weekly",
   orgAddress: "Head Office, Lilongwe, Malawi",
   orgPhone: "+265 1 755 000",
@@ -564,21 +576,23 @@ const defaultSettings: SystemSettings = {
 };
 
 const emptyOperationalState = (): DBState => ({
-  users: [defaultUsers[0]],
-  passwords: { [defaultUsers[0].id]: defaultPasswords[defaultUsers[0].id] },
-  clients: [],
-  categories: [],
-  departments: [],
-  locations: [],
-  suppliers: [],
-  assets: [],
-  assignments: [],
-  transfers: [],
-  maintenance: [],
-  verifications: [],
-  disposals: [],
-  auditLogs: [],
-  notifications: [],
+  users: defaultUsers,
+  passwords: defaultPasswords,
+  clients: defaultClients,
+  categories: defaultCategories,
+  departments: defaultDepartments,
+  locations: defaultLocations,
+  suppliers: defaultSuppliers,
+  assets: defaultAssets,
+  assignments: defaultAssignments,
+  transfers: defaultTransfers,
+  maintenance: defaultMaintenance,
+  verifications: defaultVerifications,
+  disposals: defaultDisposals,
+  auditLogs: defaultAuditLogs,
+  reminders: [],
+  notifications: defaultNotifications,
+  notificationPreferences: defaultNotificationPreferences,
   settings: defaultSettings
 });
 
@@ -600,25 +614,8 @@ const seedIds = {
 };
 
 function removeBundledOperationalRecords(state: DBState): DBState {
-  return {
-    ...state,
-    users: Array.isArray(state.users)
-      ? state.users.filter(user => !seedIds.users.has(user.id))
-      : [defaultUsers[0]],
-    clients: Array.isArray(state.clients) ? state.clients.filter(item => !seedIds.clients.has(item.id)) : [],
-    categories: Array.isArray(state.categories) ? state.categories.filter(item => !seedIds.categories.has(item.id)) : [],
-    departments: Array.isArray(state.departments) ? state.departments.filter(item => !seedIds.departments.has(item.id)) : [],
-    locations: Array.isArray(state.locations) ? state.locations.filter(item => !seedIds.locations.has(item.id)) : [],
-    suppliers: Array.isArray(state.suppliers) ? state.suppliers.filter(item => !seedIds.suppliers.has(item.id)) : [],
-    assets: Array.isArray(state.assets) ? state.assets.filter(item => !seedIds.assets.has(item.id)) : [],
-    assignments: Array.isArray(state.assignments) ? state.assignments.filter(item => !seedIds.assignments.has(item.id)) : [],
-    transfers: Array.isArray(state.transfers) ? state.transfers.filter(item => !seedIds.transfers.has(item.id)) : [],
-    maintenance: Array.isArray(state.maintenance) ? state.maintenance.filter(item => !seedIds.maintenance.has(item.id)) : [],
-    verifications: Array.isArray(state.verifications) ? state.verifications.filter(item => !seedIds.verifications.has(item.id)) : [],
-    disposals: Array.isArray(state.disposals) ? state.disposals.filter(item => !seedIds.disposals.has(item.id)) : [],
-    auditLogs: Array.isArray(state.auditLogs) ? state.auditLogs.filter(item => !seedIds.auditLogs.has(item.id)) : [],
-    notifications: Array.isArray(state.notifications) ? state.notifications.filter(item => !seedIds.notifications.has(item.id)) : []
-  };
+  // Return the state unmodified to keep persistent seeded data entries in localStorage.
+  return state;
 }
 
 export function getDatabaseState(): DBState {
@@ -738,7 +735,28 @@ export function getDatabaseState(): DBState {
     if (!Array.isArray(parsed.verifications)) parsed.verifications = [];
     if (!Array.isArray(parsed.disposals)) parsed.disposals = [];
     if (!Array.isArray(parsed.auditLogs)) parsed.auditLogs = [];
+    if (!Array.isArray(parsed.reminders)) {
+      parsed.reminders = [];
+      modified = true;
+    }
     if (!Array.isArray(parsed.notifications)) parsed.notifications = [];
+    if (!Array.isArray(parsed.notificationPreferences)) {
+      parsed.notificationPreferences = [];
+      modified = true;
+    }
+
+    parsed.users.forEach(user => {
+      const existingPref = parsed.notificationPreferences.find(pref => pref.userId === user.id);
+      if (!existingPref) {
+        parsed.notificationPreferences.push({
+          userId: user.id,
+          emailEnabled: user.preferences?.emailNotif ?? true,
+          pushEnabled: user.preferences?.desktopNotif ?? true,
+          smsEnabled: false
+        });
+        modified = true;
+      }
+    });
 
     // Auto-patch settings with fixed-asset defaults
     if (!parsed.settings) {
@@ -795,6 +813,7 @@ export function getDatabaseState(): DBState {
       currency: defaultSettings.currency,
       timezone: defaultSettings.timezone,
       dateFormat: "DD/MM/YYYY",
+      reminderIntervals: defaultSettings.reminderIntervals,
       typography: "Montserrat"
     };
     Object.entries(settingsPatch).forEach(([key, value]) => {
@@ -837,10 +856,142 @@ export function getDatabaseState(): DBState {
   }
 }
 
+export interface DatabaseIntegrityResult {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+  metrics: {
+    users: number;
+    clients: number;
+    assets: number;
+    reminders: number;
+    notifications: number;
+    auditLogs: number;
+  };
+}
+
+function collectDuplicateIds(items: Array<{ id: string }>, label: string, errors: string[]): void {
+  const seen = new Set<string>();
+  items.forEach(item => {
+    if (!item.id) {
+      errors.push(`${label} record missing id.`);
+      return;
+    }
+    if (seen.has(item.id)) {
+      errors.push(`${label} contains duplicate id '${item.id}'.`);
+    }
+    seen.add(item.id);
+  });
+}
+
+export function validateDatabaseIntegrity(state: DBState): DatabaseIntegrityResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  const collections: Array<[keyof DBState, string]> = [
+    ["users", "users"],
+    ["clients", "clients"],
+    ["categories", "categories"],
+    ["departments", "departments"],
+    ["locations", "locations"],
+    ["suppliers", "suppliers"],
+    ["assets", "assets"],
+    ["assignments", "assignments"],
+    ["transfers", "transfers"],
+    ["maintenance", "maintenance"],
+    ["verifications", "verifications"],
+    ["disposals", "disposals"],
+    ["auditLogs", "auditLogs"],
+    ["reminders", "reminders"],
+    ["notifications", "notifications"],
+    ["notificationPreferences", "notificationPreferences"]
+  ];
+
+  collections.forEach(([key, label]) => {
+    if (!Array.isArray(state[key])) {
+      errors.push(`${label} collection is missing or invalid.`);
+    }
+  });
+
+  if (errors.length === 0) {
+    collectDuplicateIds(state.users, "users", errors);
+    collectDuplicateIds(state.clients, "clients", errors);
+    collectDuplicateIds(state.categories, "categories", errors);
+    collectDuplicateIds(state.departments, "departments", errors);
+    collectDuplicateIds(state.locations, "locations", errors);
+    collectDuplicateIds(state.suppliers, "suppliers", errors);
+    collectDuplicateIds(state.assets, "assets", errors);
+    collectDuplicateIds(state.assignments, "assignments", errors);
+    collectDuplicateIds(state.transfers, "transfers", errors);
+    collectDuplicateIds(state.maintenance, "maintenance", errors);
+    collectDuplicateIds(state.verifications, "verifications", errors);
+    collectDuplicateIds(state.disposals, "disposals", errors);
+    collectDuplicateIds(state.auditLogs, "auditLogs", errors);
+    collectDuplicateIds(state.reminders, "reminders", errors);
+    collectDuplicateIds(state.notifications, "notifications", errors);
+
+    state.assets.forEach(asset => {
+      if (!state.categories.some(item => item.id === asset.categoryId)) warnings.push(`Asset ${asset.assetTag} references missing category ${asset.categoryId}.`);
+      if (!state.departments.some(item => item.id === asset.departmentId)) warnings.push(`Asset ${asset.assetTag} references missing department ${asset.departmentId}.`);
+      if (!state.locations.some(item => item.id === asset.locationId)) warnings.push(`Asset ${asset.assetTag} references missing location ${asset.locationId}.`);
+      if (!state.suppliers.some(item => item.id === asset.supplierId)) warnings.push(`Asset ${asset.assetTag} references missing supplier ${asset.supplierId}.`);
+      if (asset.assignedUserId && !state.users.some(item => item.id === asset.assignedUserId)) warnings.push(`Asset ${asset.assetTag} references missing assigned user ${asset.assignedUserId}.`);
+      if (asset.clientId && !state.clients.some(item => item.id === asset.clientId)) warnings.push(`Asset ${asset.assetTag} references missing client ${asset.clientId}.`);
+    });
+
+    state.assignments.forEach(record => {
+      if (!state.assets.some(item => item.id === record.assetId)) warnings.push(`Assignment ${record.id} references missing asset ${record.assetId}.`);
+      if (!state.users.some(item => item.id === record.userId)) warnings.push(`Assignment ${record.id} references missing user ${record.userId}.`);
+      if (!state.departments.some(item => item.id === record.departmentId)) warnings.push(`Assignment ${record.id} references missing department ${record.departmentId}.`);
+    });
+
+    state.reminders.forEach(reminder => {
+      if (reminder.assignedTo !== "all" && !state.users.some(item => item.id === reminder.assignedTo)) warnings.push(`Reminder ${reminder.id} references missing assigned user ${reminder.assignedTo}.`);
+      if (Number.isNaN(new Date(reminder.dueDate).getTime())) warnings.push(`Reminder ${reminder.id} has invalid due date ${reminder.dueDate}.`);
+    });
+
+    state.notifications.forEach(notification => {
+      if (notification.userId !== "all" && !state.users.some(item => item.id === notification.userId)) warnings.push(`Notification ${notification.id} references missing user ${notification.userId}.`);
+      if (notification.reminderId && !state.reminders.some(item => item.id === notification.reminderId)) warnings.push(`Notification ${notification.id} references missing reminder ${notification.reminderId}.`);
+    });
+  }
+
+  if (state.settings.currency !== "MWK") warnings.push("Currency is not MWK.");
+  if (state.settings.timezone !== "Africa/Blantyre") warnings.push("Timezone is not Africa/Blantyre.");
+  if (state.settings.dateFormat !== "DD/MM/YYYY") warnings.push("Date format is not DD/MM/YYYY.");
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    metrics: {
+      users: Array.isArray(state.users) ? state.users.length : 0,
+      clients: Array.isArray(state.clients) ? state.clients.length : 0,
+      assets: Array.isArray(state.assets) ? state.assets.length : 0,
+      reminders: Array.isArray(state.reminders) ? state.reminders.length : 0,
+      notifications: Array.isArray(state.notifications) ? state.notifications.length : 0,
+      auditLogs: Array.isArray(state.auditLogs) ? state.auditLogs.length : 0
+    }
+  };
+}
+
 export function saveDatabaseState(state: DBState): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event(DATABASE_SYNC_EVENT));
+  const integrity = validateDatabaseIntegrity(state);
+  if (!integrity.ok) {
+    console.error("FAIMS database integrity errors blocked save:", integrity.errors);
+    throw new Error(`Database integrity validation failed: ${integrity.errors.join("; ")}`);
+  }
+  if (integrity.warnings.length > 0) {
+    console.warn("FAIMS database integrity warnings:", integrity.warnings);
+  }
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(DATABASE_SYNC_EVENT));
+    }
+  } catch (error) {
+    console.error("Failed to persist FAIMS database state", error);
+    throw error;
   }
 }
 
@@ -898,6 +1049,228 @@ export function triggerNotification(userId: string, title: string, message: stri
   };
   state.notifications.unshift(newNot);
   saveDatabaseState(state);
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function toLocalDateOnly(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function parseDateOnly(dateString: string): Date | null {
+  const [year, month, day] = dateString.split("T")[0].split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const parsed = new Date(year, month - 1, day);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function daysUntilDate(dueDate: string, now = new Date()): number | null {
+  const due = parseDateOnly(dueDate);
+  if (!due) return null;
+  return Math.ceil((toLocalDateOnly(due).getTime() - toLocalDateOnly(now).getTime()) / MS_PER_DAY);
+}
+
+function addRecurrence(dateString: string, recurrence: Reminder["recurrence"]): string | null {
+  if (recurrence === "None") return null;
+  const due = parseDateOnly(dateString);
+  if (!due) return null;
+  const next = new Date(due);
+  if (recurrence === "Daily") next.setDate(next.getDate() + 1);
+  if (recurrence === "Weekly") next.setDate(next.getDate() + 7);
+  if (recurrence === "Monthly") next.setMonth(next.getMonth() + 1);
+  if (recurrence === "Quarterly") next.setMonth(next.getMonth() + 3);
+  if (recurrence === "Semi-Annual") next.setMonth(next.getMonth() + 6);
+  if (recurrence === "Annual") next.setFullYear(next.getFullYear() + 1);
+  return next.toISOString().split("T")[0];
+}
+
+function uniqueId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function notificationRecipients(reminder: Reminder, db: DBState): string[] {
+  if (!reminder.assignedTo || reminder.assignedTo === "all") return ["all"];
+  const userExists = db.users.some(user => user.id === reminder.assignedTo);
+  return userExists ? [reminder.assignedTo] : ["all"];
+}
+
+function buildReminderMessage(reminder: Reminder, dayDelta: number): string {
+  const due = formatDate(reminder.dueDate);
+  const amount = reminder.amount ? ` Amount: ${formatCurrency(reminder.amount)}.` : "";
+  if (dayDelta < 0) {
+    return `${reminder.title} is overdue by ${Math.abs(dayDelta)} day${Math.abs(dayDelta) === 1 ? "" : "s"} (due ${due}).${amount}`;
+  }
+  if (dayDelta === 0) {
+    return `${reminder.title} is due today (${due}).${amount}`;
+  }
+  return `${reminder.title} is due in ${dayDelta} day${dayDelta === 1 ? "" : "s"} (${due}).${amount}`;
+}
+
+export function runReminderEngine(now = new Date()): { notificationsCreated: number; recurrencesCreated: number } {
+  const db = getDatabaseState();
+  if (!db.settings.isNotificationsEnabled) {
+    return { notificationsCreated: 0, recurrencesCreated: 0 };
+  }
+
+  const intervals = [...new Set(db.settings.reminderIntervals || [30, 14, 7, 3, 1, 0])]
+    .filter(value => Number.isFinite(value) && value >= 0)
+    .sort((a, b) => b - a);
+  let notificationsCreated = 0;
+  let recurrencesCreated = 0;
+  let modified = false;
+
+  db.reminders.forEach(reminder => {
+    if (reminder.status === "Cancelled") return;
+
+    const dayDelta = daysUntilDate(reminder.dueDate, now);
+    if (dayDelta === null) return;
+
+    if (reminder.status === "Completed") {
+      if (reminder.recurrence !== "None" && !reminder.nextOccurrenceGenerated) {
+        const nextDueDate = addRecurrence(reminder.dueDate, reminder.recurrence);
+        if (nextDueDate) {
+          db.reminders.unshift({
+            ...reminder,
+            id: uniqueId("rem"),
+            dueDate: nextDueDate,
+            status: "Active",
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString(),
+            completedAt: undefined,
+            snoozedUntil: undefined,
+            parentReminderId: reminder.id,
+            nextOccurrenceGenerated: false
+          });
+          reminder.nextOccurrenceGenerated = true;
+          reminder.updatedAt = now.toISOString();
+          db.auditLogs.unshift({
+            id: uniqueId("log-reminder-recur"),
+            userId: "System",
+            userName: "Reminder Engine",
+            action: "Reminder Created",
+            details: `Generated next ${reminder.recurrence} occurrence for ${reminder.title}, due ${nextDueDate}.`,
+            timestamp: now.toISOString(),
+            ipAddress: "127.0.0.1"
+          });
+          recurrencesCreated++;
+          modified = true;
+        }
+      }
+      return;
+    }
+
+    if (reminder.snoozedUntil) {
+      const snoozedUntil = parseDateOnly(reminder.snoozedUntil);
+      if (snoozedUntil && toLocalDateOnly(now).getTime() < snoozedUntil.getTime()) return;
+    }
+
+    const shouldNotify = dayDelta < 0 || intervals.includes(dayDelta);
+    if (!shouldNotify) return;
+
+    notificationRecipients(reminder, db).forEach(userId => {
+      const deliveryKey = `${reminder.id}:${dayDelta < 0 ? "overdue" : dayDelta}:${now.toISOString().split("T")[0]}:${userId}`;
+      const exists = db.notifications.some(notification => notification.deliveryKey === deliveryKey);
+      if (exists) return;
+
+      const statusType = dayDelta < 0 || dayDelta <= 3 ? "warning" : "info";
+      const title = dayDelta < 0 ? `Overdue: ${reminder.title}` : dayDelta === 0 ? `Due Today: ${reminder.title}` : `Upcoming: ${reminder.title}`;
+      db.notifications.unshift({
+        id: uniqueId("not-rem"),
+        reminderId: reminder.id,
+        userId,
+        title,
+        message: buildReminderMessage(reminder, dayDelta),
+        isRead: false,
+        createdAt: now.toISOString(),
+        sentAt: now.toISOString(),
+        status: "sent",
+        channel: "in-app",
+        deliveryKey,
+        type: statusType
+      });
+      db.auditLogs.unshift({
+        id: uniqueId("log-notification"),
+        userId: "System",
+        userName: "Reminder Engine",
+        action: "Notification Sent",
+        details: `${title} routed to ${userId} through in-app/dashboard notification channel.`,
+        timestamp: now.toISOString(),
+        ipAddress: "127.0.0.1"
+      });
+      notificationsCreated++;
+      modified = true;
+    });
+  });
+
+  if (modified) {
+    saveDatabaseState(db);
+  }
+
+  return { notificationsCreated, recurrencesCreated };
+}
+
+export function startReminderScheduler(): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  runReminderEngine();
+  const intervalId = window.setInterval(() => runReminderEngine(), 60 * 60 * 1000);
+  return () => window.clearInterval(intervalId);
+}
+
+export function completeReminder(reminderId: string, userId: string, userName: string): void {
+  const db = getDatabaseState();
+  const reminder = db.reminders.find(item => item.id === reminderId);
+  if (!reminder) return;
+  reminder.status = "Completed";
+  reminder.completedAt = new Date().toISOString();
+  reminder.updatedAt = reminder.completedAt;
+  db.auditLogs.unshift({
+    id: uniqueId("log-reminder-complete"),
+    userId,
+    userName,
+    action: "Reminder Completed",
+    details: `${reminder.title} marked complete. Recurrence: ${reminder.recurrence}.`,
+    timestamp: reminder.completedAt,
+    ipAddress: "client-unavailable"
+  });
+  saveDatabaseState(db);
+  runReminderEngine();
+}
+
+export function snoozeReminder(reminderId: string, days: number, userId: string, userName: string): void {
+  const db = getDatabaseState();
+  const reminder = db.reminders.find(item => item.id === reminderId);
+  if (!reminder) return;
+  const snoozedUntil = new Date();
+  snoozedUntil.setDate(snoozedUntil.getDate() + days);
+  reminder.status = "Snoozed";
+  reminder.snoozedUntil = snoozedUntil.toISOString().split("T")[0];
+  reminder.updatedAt = new Date().toISOString();
+  db.auditLogs.unshift({
+    id: uniqueId("log-reminder-snooze"),
+    userId,
+    userName,
+    action: "Reminder Updated",
+    details: `${reminder.title} snoozed until ${reminder.snoozedUntil}.`,
+    timestamp: reminder.updatedAt,
+    ipAddress: "client-unavailable"
+  });
+  saveDatabaseState(db);
+}
+
+export function updateNotificationPreference(userId: string, patch: Partial<NotificationPreference>): void {
+  const db = getDatabaseState();
+  const existing = db.notificationPreferences.find(pref => pref.userId === userId);
+  if (existing) {
+    Object.assign(existing, patch);
+  } else {
+    db.notificationPreferences.push({
+      userId,
+      emailEnabled: patch.emailEnabled ?? true,
+      pushEnabled: patch.pushEnabled ?? true,
+      smsEnabled: patch.smsEnabled ?? false
+    });
+  }
+  saveDatabaseState(db);
 }
 
 // ==========================================

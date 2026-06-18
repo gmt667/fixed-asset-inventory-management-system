@@ -24,7 +24,7 @@ import {
   Sparkles,
   Info
 } from "lucide-react";
-import { getDatabaseState, saveDatabaseState, addAuditRecord, triggerNotification } from "../db";
+import { getDatabaseState, saveDatabaseState, addAuditRecord, triggerNotification, updateNotificationPreference } from "../db";
 import { User, UserPreferences, UserRole } from "../types";
 
 interface ProfileProps {
@@ -85,6 +85,7 @@ export default function ProfileComponent({ currentUser, onUpdateUser, onThemeCha
   const [totpCode, setTotpCode] = useState("");
   const [totpVerified, setTotpVerified] = useState(currentUser.totpEnabled || false);
   const [totpError, setTotpError] = useState("");
+  const [mfaEnrollmentCode] = useState(() => String(Math.floor(100000 + Math.random() * 900000)));
 
   const refreshLocalState = () => {
     const freshDb = getDatabaseState();
@@ -162,6 +163,11 @@ export default function ProfileComponent({ currentUser, onUpdateUser, onThemeCha
 
       state.users[userIndex] = updatedUser;
       saveDatabaseState(state);
+      updateNotificationPreference(currentUser.id, {
+        emailEnabled: emailNotif,
+        pushEnabled: desktopNotif,
+        smsEnabled: false
+      });
       onUpdateUser(updatedUser);
 
       addAuditRecord(
@@ -260,7 +266,7 @@ export default function ProfileComponent({ currentUser, onUpdateUser, onThemeCha
         event: "Password Modified Policy Pass",
         device: "Corporate Desktop Terminal",
         browser: "Chrome Secured Engine",
-        ip: "192.168.10.22",
+        ip: "client-unavailable",
         status: "success"
       });
       state.users[userIndex].loginHistory = freshHistory;
@@ -282,12 +288,12 @@ export default function ProfileComponent({ currentUser, onUpdateUser, onThemeCha
 
   // Enable/Disable Two Factor Authentication
   const handleVerify2FA = () => {
-    if (totpCode.trim() === "123456" || totpCode.trim() === "000000" || totpCode.length === 6) {
+    if (totpCode.trim() === mfaEnrollmentCode) {
       const state = getDatabaseState();
       const userIndex = state.users.findIndex((u) => u.id === currentUser.id);
       if (userIndex !== -1) {
         state.users[userIndex].totpEnabled = true;
-        state.users[userIndex].totpSecret = "HJK9-00LL-UI88-P710";
+        state.users[userIndex].totpSecret = `client-mfa-${mfaEnrollmentCode}`;
         saveDatabaseState(state);
         onUpdateUser(state.users[userIndex]);
       }
@@ -321,21 +327,21 @@ export default function ProfileComponent({ currentUser, onUpdateUser, onThemeCha
     const state = getDatabaseState();
     const userIdx = state.users.findIndex((u) => u.id === currentUser.id);
     if (userIdx !== -1) {
-      // Clear sessions list down to only current dev session
+      // Clear sessions list down to only the current browser session
       const currentDevSession = state.users[userIdx].activeSessions?.slice(0, 1) || [
         {
           id: `sess-${Date.now()}`,
           loginTime: new Date().toISOString(),
-          device: "Corporate Workstation",
-          browser: "Chrome Node",
-          ip: "192.168.10.22"
+          device: typeof navigator !== "undefined" ? navigator.platform || "Browser Client" : "Browser Client",
+          browser: typeof navigator !== "undefined" ? navigator.userAgent : "Browser",
+          ip: "client-unavailable"
         }
       ];
       state.users[userIdx].activeSessions = currentDevSession;
       saveDatabaseState(state);
       onUpdateUser(state.users[userIdx]);
     }
-    addAuditRecord(currentUser.id, currentUser.name, "Killed Remote Sessions", "Forced termination of other active developer nodes");
+    addAuditRecord(currentUser.id, currentUser.name, "Killed Remote Sessions", "Forced termination of other active browser sessions");
     triggerNotification(currentUser.id, "Sessions Terminated", "Successfully logged out all other logins context.", "success");
     alert("Termination signals broadcasted. All other remote browser terminals have been logged out!");
     refreshLocalState();
@@ -343,37 +349,12 @@ export default function ProfileComponent({ currentUser, onUpdateUser, onThemeCha
 
   // Get active session data
   const userSessions = useMemo(() => {
-    return currentUser.activeSessions || [
-      {
-        id: "sess-1",
-        loginTime: currentUser.lastLogin || new Date().toISOString(),
-        device: "Corporate Desktop PC (Windows 11)",
-        browser: "Google Chrome v124.0.0",
-        ip: "192.168.10.22"
-      }
-    ];
+    return currentUser.activeSessions || [];
   }, [currentUser]);
 
   // Get audit activity/login log history
   const loginActivity = useMemo(() => {
-    return currentUser.loginHistory || [
-      {
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
-        event: "Corporate Identity Login",
-        device: "Windows Workstation",
-        browser: "Chrome",
-        ipAddress: "192.168.10.22",
-        status: "success"
-      },
-      {
-        timestamp: new Date(Date.now() - 86400000).toISOString(),
-        event: "Dashboard Verification Check",
-        device: "Safari Node iOS",
-        browser: "Mobile Safari",
-        ipAddress: "172.56.24.81",
-        status: "success"
-      }
-    ];
+    return currentUser.loginHistory || [];
   }, [currentUser]);
 
   return (
@@ -978,7 +959,7 @@ export default function ProfileComponent({ currentUser, onUpdateUser, onThemeCha
                 1. Open your authenticator mobile application (Google Authenticator, Microsoft Auth, Authy, etc.).
               </p>
               
-              {/* QR Code simulator asset */}
+              {/* Enrollment verification card */}
               <div className="bg-white p-2.5 rounded-lg w-28 h-28 mx-auto flex items-center justify-center border border-zinc-800">
                 <svg viewBox="0 0 100 100" width="100" height="100">
                   <rect width="100" height="100" fill="white" />
@@ -994,8 +975,8 @@ export default function ProfileComponent({ currentUser, onUpdateUser, onThemeCha
               </div>
 
               <div className="text-center font-mono">
-                <span className="text-[10px] text-zinc-505 text-zinc-500 uppercase">Secret key seed phrase:</span>
-                <p className="font-bold text-indigo-300">HJK9 00LL UI88 P710</p>
+                <span className="text-[10px] text-zinc-505 text-zinc-500 uppercase">Enrollment verification code:</span>
+                <p className="font-bold text-indigo-300">{mfaEnrollmentCode}</p>
               </div>
 
               <div className="space-y-1">
@@ -1004,7 +985,7 @@ export default function ProfileComponent({ currentUser, onUpdateUser, onThemeCha
                   type="text"
                   value={totpCode}
                   onChange={(e) => setTotpCode(e.target.value)}
-                  placeholder="e.g. 123456"
+                  placeholder="Six digit code"
                   maxLength={6}
                   className="w-full bg-zinc-900 border border-zinc-800 text-white py-2 px-3.5 rounded-lg tracking-widest text-center text-sm font-mono focus:border-indigo-600 focus:outline-none"
                 />

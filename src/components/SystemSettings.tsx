@@ -66,6 +66,7 @@ export default function SystemSettingsComponent({ userRole, currentUserId, focus
   const [emailSender, setEmailSender] = useState(db.settings.emailSender || "faims-noreply@giantplus.com");
   const [notifications, setNotifications] = useState(db.settings.isNotificationsEnabled);
   const [backupFreq, setBackupFreq] = useState(db.settings.backupFrequency);
+  const [reminderIntervals, setReminderIntervals] = useState((db.settings.reminderIntervals || [30, 14, 7, 3, 1, 0]).join(", "));
 
   // New admin organizational settings fields
   const [orgAddress, setOrgAddress] = useState(db.settings.orgAddress || "101 Enterprise Road, Industrial Area, Nairobi");
@@ -154,7 +155,11 @@ export default function SystemSettingsComponent({ userRole, currentUserId, focus
       systemTheme,
       currency,
       timezone,
-      dateFormat
+      dateFormat,
+      reminderIntervals: reminderIntervals
+        .split(",")
+        .map(value => Number(value.trim()))
+        .filter(value => Number.isFinite(value) && value >= 0)
     };
 
     currentDB.settings = updatedSettings;
@@ -761,6 +766,19 @@ INSERT INTO assets VALUES ${db.assets.map(a => `('${a.id}', '${a.assetTag}', '${
                     <label htmlFor="notifications" className="font-bold text-slate-700 cursor-pointer select-none">
                       Toggle automatic push notifications on user activities.
                     </label>
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="font-bold text-slate-700">Automated reminder intervals</label>
+                    <input
+                      type="text"
+                      value={reminderIntervals}
+                      onChange={(e) => setReminderIntervals(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-slate-808 focus:outline-none font-mono"
+                      placeholder="30, 14, 7, 3, 1, 0"
+                    />
+                    <p className="text-[10px] text-slate-400">
+                      Days before due date. The engine also sends daily overdue alerts automatically.
+                    </p>
                   </div>
                 </div>
               </div>
