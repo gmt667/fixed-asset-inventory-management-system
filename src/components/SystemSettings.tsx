@@ -36,7 +36,7 @@ interface SystemSettingsProps {
 }
 
 export default function SystemSettingsComponent({ userRole, currentUserId, focusSection }: SystemSettingsProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [isBackupSimulating, setIsBackupSimulating] = useState(false);
   const [backupProgress, setBackupProgress] = useState(0);
 

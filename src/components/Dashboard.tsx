@@ -127,7 +127,7 @@ const QUICK_ACTIONS: QuickAction[] = [
 ];
 
 export default function Dashboard({ onNavigate, userRole, onSelectAsset, currentUser, subTab }: DashboardProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
 
   useEffect(() => {
     const refresh = () => setDb(getDatabaseState());

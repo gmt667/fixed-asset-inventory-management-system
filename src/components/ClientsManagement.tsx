@@ -68,7 +68,7 @@ const emptyClientForm = (): ClientForm => ({
 });
 
 export default function ClientsManagement({ userRole, currentUserId, initialView = "Dashboard" }: ClientsManagementProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [activeView, setActiveView] = useState<ClientView>(initialView);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");

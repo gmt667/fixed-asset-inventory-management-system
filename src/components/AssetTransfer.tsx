@@ -27,7 +27,7 @@ interface AssetTransferProps {
 }
 
 export default function AssetTransferComponent({ userRole, currentUserId }: AssetTransferProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Form parameters

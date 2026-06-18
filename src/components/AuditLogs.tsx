@@ -27,12 +27,12 @@ interface AuditLogsProps {
 }
 
 export default function AuditLogs({ userRole, currentUserId }: AuditLogsProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [isExporting, setIsExporting] = useState(false);
 
-  const [offline, setOffline] = useState(isOffline());
+  const [offline, setOffline] = useState(() => isOffline());
   const [bufferedLogs, setBufferedLogs] = useState<AuditLog[]>(getBufferedAuditLogs());
 
   const refreshDb = () => {

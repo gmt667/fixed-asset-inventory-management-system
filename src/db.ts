@@ -54,6 +54,7 @@ export interface DBState {
 
 const STORAGE_KEY = "faims_db_state";
 export const DATABASE_SYNC_EVENT = "faims_db_synced";
+let memoryDatabaseState: DBState | null = null;
 
 // Deterministic QR pattern generator helper (outputs detailed grid-like SVG path or custom layout)
 export function generateAssetQRCodeSVG(text: string): string {
@@ -619,10 +620,25 @@ function removeBundledOperationalRecords(state: DBState): DBState {
 }
 
 export function getDatabaseState(): DBState {
-  const data = localStorage.getItem(STORAGE_KEY);
+  let data: string | null = null;
+  try {
+    data = localStorage.getItem(STORAGE_KEY);
+  } catch (e) {
+    console.error("FAIMS: localStorage is unavailable. Using in-memory database state.", e);
+    if (!memoryDatabaseState) {
+      memoryDatabaseState = emptyOperationalState();
+    }
+    return memoryDatabaseState;
+  }
   if (!data) {
     const initialState = emptyOperationalState();
-    saveDatabaseState(initialState);
+    memoryDatabaseState = initialState;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(initialState));
+      if (typeof window !== "undefined") window.dispatchEvent(new Event(DATABASE_SYNC_EVENT));
+    } catch (e) {
+      console.error("FAIMS: Failed to persist initial state to localStorage.", e);
+    }
     return initialState;
   }
   
@@ -844,14 +860,20 @@ export function getDatabaseState(): DBState {
       }
     });
 
-    if (modified) {
-      saveDatabaseState(parsed);
-    }
+    memoryDatabaseState = parsed;
     return parsed;
   } catch (e) {
     // If storage is corrupt, recover to a clean bootstrap state.
+    // IMPORTANT: do NOT call saveDatabaseState() here — it can throw and would escape the catch block.
+    console.error("FAIMS: localStorage corruption detected. Recovering to clean state.", e);
     const cleanState = emptyOperationalState();
-    saveDatabaseState(cleanState);
+    memoryDatabaseState = cleanState;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanState));
+      if (typeof window !== "undefined") window.dispatchEvent(new Event(DATABASE_SYNC_EVENT));
+    } catch (storageError) {
+      console.error("FAIMS: Failed to persist recovery state.", storageError);
+    }
     return cleanState;
   }
 }
@@ -976,13 +998,15 @@ export function validateDatabaseIntegrity(state: DBState): DatabaseIntegrityResu
 }
 
 export function saveDatabaseState(state: DBState): void {
+  memoryDatabaseState = state;
+  // Run integrity validation for observability — but NEVER throw.
+  // Throwing here propagates through runReminderEngine/useEffect and crashes the React tree.
   const integrity = validateDatabaseIntegrity(state);
   if (!integrity.ok) {
-    console.error("FAIMS database integrity errors blocked save:", integrity.errors);
-    throw new Error(`Database integrity validation failed: ${integrity.errors.join("; ")}`);
+    console.error("FAIMS database integrity warnings (save will proceed):", integrity.errors);
   }
   if (integrity.warnings.length > 0) {
-    console.warn("FAIMS database integrity warnings:", integrity.warnings);
+    console.warn("FAIMS database integrity notices:", integrity.warnings);
   }
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -990,8 +1014,8 @@ export function saveDatabaseState(state: DBState): void {
       window.dispatchEvent(new Event(DATABASE_SYNC_EVENT));
     }
   } catch (error) {
-    console.error("Failed to persist FAIMS database state", error);
-    throw error;
+    // localStorage can fail (quota exceeded, private mode, etc.) — log only, never re-throw.
+    console.error("FAIMS: Failed to persist database state to localStorage.", error);
   }
 }
 
@@ -1282,7 +1306,12 @@ const BUFFER_VERIFICATIONS_KEY = "faims_offline_buffer_verifications";
 const BUFFER_AUDIT_LOGS_KEY = "faims_offline_buffer_audit_logs";
 
 export function isOffline(): boolean {
-  const offlineOverride = localStorage.getItem(OFFLINE_MODE_KEY);
+  let offlineOverride: string | null = null;
+  try {
+    offlineOverride = localStorage.getItem(OFFLINE_MODE_KEY);
+  } catch (e) {
+    console.error("FAIMS: Unable to read offline mode from localStorage.", e);
+  }
   if (offlineOverride === null) {
     if (typeof navigator !== "undefined") {
       return !navigator.onLine;

@@ -44,7 +44,7 @@ const ACCENT_COLORS = [
 ];
 
 export default function ProfileComponent({ currentUser, onUpdateUser, onThemeChanged, initialTab }: ProfileProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [activeSubTab, setActiveSubTab] = useState<"personal" | "security" | "appearance">(initialTab || "personal");
 
   React.useEffect(() => {

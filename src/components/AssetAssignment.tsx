@@ -26,7 +26,7 @@ interface AssetAssignmentProps {
 }
 
 export default function AssetAssignmentComponent({ userRole, currentUserId }: AssetAssignmentProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   // Checkout Form

@@ -84,8 +84,9 @@ type Tab =
   | "Profile";
 
 export default function App() {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
 
   const currentPreferences = useMemo(() => {
     const defaultTheme = db.settings.systemTheme || "light";
@@ -93,8 +94,8 @@ export default function App() {
     return currentUser.preferences || { theme: defaultTheme as "light" | "dark" | "system", accentColor: "blue", sidebarStyle: "dark", fontSize: "md" };
   }, [currentUser, db.settings.systemTheme]);
 
-  const [offline, setOffline] = useState(isOffline());
-  const [bufferCount, setBufferCount] = useState(getOfflineBufferLengths().total);
+  const [offline, setOffline] = useState(() => isOffline());
+  const [bufferCount, setBufferCount] = useState(() => getOfflineBufferLengths().total);
   const [isSyncing, setIsSyncing] = useState(false);
 
   // Auto preventive maintenance trigger on app load
@@ -291,6 +292,7 @@ export default function App() {
       setEmailInput(savedEmail);
       setRememberMe(true);
     }
+    setAuthReady(true);
   }, []);
 
   const refreshDatabase = () => {
@@ -930,6 +932,18 @@ export default function App() {
 
   // Safe check if logged out, display portal arena
   if (!currentUser) {
+    if (!authReady) {
+      return (
+        <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-4 text-white">
+          <div className="max-w-sm w-full rounded-2xl border border-[#27272a] bg-[#121214] p-8 text-center shadow-2xl">
+            <div className="mx-auto mb-4 h-10 w-10 rounded-lg bg-indigo-600 flex items-center justify-center font-bold">F</div>
+            <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">Initializing secure session</p>
+            <p className="mt-3 text-sm text-zinc-300">Loading authentication state and workspace preferences...</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-4">
         {isChangingPassword ? (

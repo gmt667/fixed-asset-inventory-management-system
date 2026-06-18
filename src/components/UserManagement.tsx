@@ -26,7 +26,7 @@ interface UserManagementProps {
 }
 
 export default function UserManagement({ userRole, currentUserId }: UserManagementProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
 

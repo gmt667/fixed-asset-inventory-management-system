@@ -335,7 +335,7 @@ export default function AssetManagement({
   onNavigateToVerification,
   initialViewMode
 }: AssetManagementProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [deptFilter, setDeptFilter] = useState("all");
@@ -659,6 +659,9 @@ export default function AssetManagement({
   const [newClientStatus, setNewClientStatus] = useState<Client["status"]>("Active");
 
   // Handle direct dashboard navigation link
+  // Note: resetDashboardSelection is intentionally excluded from deps — it is a
+  // callback prop that is recreated each render. Including it would cause an
+  // infinite loop (effect fires → resets state → parent re-renders → new fn ref → repeat).
   useEffect(() => {
     if (selectedAssetIdFromDashboard) {
       const ast = db.assets.find(a => a.id === selectedAssetIdFromDashboard);
@@ -668,7 +671,8 @@ export default function AssetManagement({
       }
       resetDashboardSelection();
     }
-  }, [selectedAssetIdFromDashboard, db, resetDashboardSelection]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAssetIdFromDashboard]);
 
   // Sync state
   const refreshDb = () => {

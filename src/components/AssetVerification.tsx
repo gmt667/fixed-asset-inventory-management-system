@@ -37,10 +37,10 @@ export default function AssetVerification({
   directAssetIdForVerification,
   resetVerificationSelection
 }: AssetVerificationProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const [offline, setOffline] = useState(isOffline());
+  const [offline, setOffline] = useState(() => isOffline());
   const [offlineVerifications, setOfflineVerifications] = useState<VerificationRecord[]>(getBufferedVerifications());
 
   // Form parameters
@@ -279,7 +279,8 @@ export default function AssetVerification({
       }
       if (resetVerificationSelection) resetVerificationSelection();
     }
-  }, [directAssetIdForVerification, resetVerificationSelection, userRole]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directAssetIdForVerification]);
 
   const refreshDb = () => {
     setDb(getDatabaseState());

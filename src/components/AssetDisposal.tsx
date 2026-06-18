@@ -25,7 +25,7 @@ interface AssetDisposalProps {
 }
 
 export default function AssetDisposal({ userRole, currentUserId }: AssetDisposalProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Form parameters

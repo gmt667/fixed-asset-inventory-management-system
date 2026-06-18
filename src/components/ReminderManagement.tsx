@@ -43,7 +43,7 @@ const CATEGORIES: ReminderCategory[] = [
 const RECURRENCES: ReminderRecurrence[] = ["None", "Daily", "Weekly", "Monthly", "Quarterly", "Semi-Annual", "Annual"];
 
 export default function ReminderManagement({ userRole, currentUserId }: ReminderManagementProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<ReminderCategory>("Custom Tasks");
   const [dueDate, setDueDate] = useState(new Date().toISOString().split("T")[0]);

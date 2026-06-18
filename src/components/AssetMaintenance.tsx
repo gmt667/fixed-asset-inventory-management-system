@@ -32,7 +32,7 @@ interface AssetMaintenanceProps {
 }
 
 export default function AssetMaintenance({ userRole, currentUserId }: AssetMaintenanceProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [targetAssetIdForMaintenance, setTargetAssetIdForMaintenance] = useState("");
 

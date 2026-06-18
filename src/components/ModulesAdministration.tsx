@@ -29,7 +29,7 @@ interface ModulesAdministrationProps {
 type ManagementTab = "Categories" | "Departments" | "Locations" | "Suppliers";
 
 export default function ModulesAdministration({ userRole, currentUserId, initialTab }: ModulesAdministrationProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [activeTab, setActiveTab] = useState<ManagementTab>(initialTab || "Categories");
 
   React.useEffect(() => {

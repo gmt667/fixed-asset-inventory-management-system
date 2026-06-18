@@ -40,7 +40,7 @@ type ReportType =
   | "Audit";
 
 export default function ReportingModule({ userRole, currentUserId, initialReport }: ReportingModuleProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [selectedReport, setSelectedReport] = useState<ReportType>(initialReport || "Register");
 
   useEffect(() => {

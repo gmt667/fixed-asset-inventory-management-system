@@ -51,7 +51,7 @@ interface CalendarEvent {
 }
 
 export default function MaintenanceCalendar({ userRole, currentUserId, onStateChange }: MaintenanceCalendarProps) {
-  const [db, setDb] = useState(getDatabaseState());
+  const [db, setDb] = useState(() => getDatabaseState());
   const [currentDate, setCurrentDate] = useState(() => {
     return new Date();
   });
