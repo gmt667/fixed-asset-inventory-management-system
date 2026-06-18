@@ -36,7 +36,8 @@ import {
   RefreshCcw,
   TrendingUp,
   ShieldCheck,
-  Menu
+  Menu,
+  Printer
 } from "lucide-react";
 import {
   getDatabaseState,
@@ -66,6 +67,7 @@ import AssetMaintenance from "./components/AssetMaintenance";
 import AssetVerification from "./components/AssetVerification";
 import AssetDisposal from "./components/AssetDisposal";
 import ReportingModule from "./components/ReportingModule";
+import DocumentsPrintCenter from "./components/DocumentsPrintCenter";
 import AuditLogs from "./components/AuditLogs";
 import SystemSettingsComponent from "./components/SystemSettings";
 import ProfileComponent from "./components/Profile";
@@ -599,6 +601,7 @@ export default function App() {
         { id: "Overview", name: "Overview", icon: <LayoutDashboard className="w-4 h-4" />, roles: [UserRole.ADMIN, UserRole.ASSET_MANAGER, UserRole.DEPT_MANAGER, UserRole.AUDITOR, UserRole.EMPLOYEE], description: "Workspace directory map." },
         { id: "HandoverCheckouts", name: "Handover Checkouts", icon: <UserCheck2 className="w-4 h-4" />, roles: [UserRole.ADMIN, UserRole.ASSET_MANAGER, UserRole.DEPT_MANAGER, UserRole.AUDITOR, UserRole.EMPLOYEE], description: "Register asset checkouts, handovers, and returns." },
         { id: "Transfers", name: "Asset Transfers", icon: <MoveHorizontal className="w-4 h-4" />, roles: [UserRole.ADMIN, UserRole.ASSET_MANAGER, UserRole.DEPT_MANAGER, UserRole.AUDITOR], description: "Authorize movement and relocation of assets across departments." },
+        { id: "ReminderCenter", name: "Reminder Center", icon: <Bell className="w-4 h-4" />, roles: [UserRole.ADMIN, UserRole.ASSET_MANAGER, UserRole.DEPT_MANAGER, UserRole.AUDITOR, UserRole.EMPLOYEE], description: "Automated operations reminders, notifications, templates, and histories." },
         { id: "Maintenance", name: "Repairs & Maintenance", icon: <Wrench className="w-4 h-4" />, roles: [UserRole.ADMIN, UserRole.ASSET_MANAGER, UserRole.DEPT_MANAGER, UserRole.EMPLOYEE], description: "Report asset defects, schedule cleanings, and log repair costs." },
         { id: "Verification", name: "Physical Verification", icon: <ClipboardList className="w-4 h-4" />, roles: [UserRole.ADMIN, UserRole.AUDITOR, UserRole.ASSET_MANAGER, UserRole.DEPT_MANAGER], description: "Reconcile, verify status, and audit physical presence of items." },
         { id: "Disposal", name: "Disposal & Retirement", icon: <ArchiveRestore className="w-4 h-4" />, roles: [UserRole.ADMIN, UserRole.ASSET_MANAGER], description: "Retire or dispose of depreciated/damaged assets." }
@@ -606,9 +609,9 @@ export default function App() {
     },
     {
       id: "Reports",
-      name: "Reports",
+      name: "Reports & Analytics",
       icon: <TrendingUp className="w-5 h-5" />,
-      roles: [UserRole.ADMIN, UserRole.ASSET_MANAGER, UserRole.DEPT_MANAGER, UserRole.AUDITOR],
+      roles: [UserRole.ADMIN, UserRole.ASSET_MANAGER, UserRole.DEPT_MANAGER, UserRole.AUDITOR, UserRole.EMPLOYEE],
       defaultSubModule: {
         [UserRole.ADMIN]: "ReportCenter",
         [UserRole.ASSET_MANAGER]: "AssetAnalytics",
@@ -617,6 +620,7 @@ export default function App() {
       },
       subModules: [
         { id: "Overview", name: "Overview", icon: <LayoutDashboard className="w-4 h-4" />, roles: [UserRole.ADMIN, UserRole.ASSET_MANAGER, UserRole.DEPT_MANAGER, UserRole.AUDITOR], description: "Workspace directory map." },
+        { id: "DocumentsPrintCenter", name: "Documents & Print Center", icon: <Printer className="w-4 h-4" />, roles: [UserRole.ADMIN, UserRole.ASSET_MANAGER, UserRole.DEPT_MANAGER, UserRole.AUDITOR, UserRole.EMPLOYEE], description: "Live document generation, print management, templates, and receipts." },
         { id: "ReportCenter", name: "Report Center", icon: <FileText className="w-4 h-4" />, roles: [UserRole.ADMIN, UserRole.ASSET_MANAGER, UserRole.DEPT_MANAGER, UserRole.AUDITOR], description: "Export standard asset details and lists as PDF/Excel/CSV." },
         { id: "AssetAnalytics", name: "Asset Analytics", icon: <BarChart3 className="w-4 h-4" />, roles: [UserRole.ADMIN, UserRole.ASSET_MANAGER, UserRole.DEPT_MANAGER, UserRole.AUDITOR], description: "Charts displaying asset valuations and category configurations." },
         { id: "UtilizationReports", name: "Utilization Reports", icon: <TrendingUp className="w-4 h-4" />, roles: [UserRole.ADMIN, UserRole.ASSET_MANAGER, UserRole.DEPT_MANAGER, UserRole.AUDITOR], description: "Examine allocation metrics and active utilization stats." },
@@ -1958,6 +1962,9 @@ export default function App() {
                 {activeSub === "Transfers" && (
                   <AssetTransferComponent userRole={currentUser.role} currentUserId={currentUser.id} />
                 )}
+                {activeSub === "ReminderCenter" && (
+                  <ReminderManagement userRole={currentUser.role} currentUserId={currentUser.id} />
+                )}
                 {activeSub === "Maintenance" && (
                   <AssetMaintenance userRole={currentUser.role} currentUserId={currentUser.id} />
                 )}
@@ -1990,7 +1997,13 @@ export default function App() {
             return (
               <>
                 {ws && renderWorkspaceLauncher(ws, activeSub !== "Overview")}
-                {activeSub !== "Overview" && (
+                {activeSub === "DocumentsPrintCenter" && (
+                  <DocumentsPrintCenter
+                    userRole={currentUser.role}
+                    currentUserId={currentUser.id}
+                  />
+                )}
+                {activeSub !== "Overview" && activeSub !== "DocumentsPrintCenter" && (
                   <ReportingModule
                     userRole={currentUser.role}
                     currentUserId={currentUser.id}

@@ -20,7 +20,16 @@ import {
   AuditLog,
   Notification,
   NotificationPreference,
+  DocumentRecord,
+  DocumentTemplate,
+  DocumentPrintHistory,
+  DocumentScope,
+  DocumentApprovalStatus,
+  DocumentExportFormat,
+  DocumentSignature,
   Reminder,
+  ReminderTemplate,
+  ReminderPriority,
   SystemSettings,
   AssetStatus,
   AssetCondition,
@@ -49,6 +58,10 @@ export interface DBState {
   reminders: Reminder[];
   notifications: Notification[];
   notificationPreferences: NotificationPreference[];
+  documents: DocumentRecord[];
+  documentTemplates: DocumentTemplate[];
+  printHistory: DocumentPrintHistory[];
+  reminderTemplates: ReminderTemplate[];
   settings: SystemSettings;
 }
 
@@ -532,6 +545,8 @@ const defaultNotificationPreferences: NotificationPreference[] = defaultUsers.ma
   smsEnabled: false
 }));
 
+const defaultReminderSchedule = [30, 14, 7, 3, 1, 0];
+
 const defaultSettings: SystemSettings = {
   orgName: "FAIMS Malawi Asset Management System",
   logo: "FA",
@@ -594,6 +609,10 @@ const emptyOperationalState = (): DBState => ({
   reminders: [],
   notifications: defaultNotifications,
   notificationPreferences: defaultNotificationPreferences,
+  documents: [],
+  documentTemplates: [],
+  printHistory: [],
+  reminderTemplates: [],
   settings: defaultSettings
 });
 
@@ -760,6 +779,86 @@ export function getDatabaseState(): DBState {
       parsed.notificationPreferences = [];
       modified = true;
     }
+    if (!Array.isArray(parsed.documents)) {
+      parsed.documents = [];
+      modified = true;
+    }
+    if (!Array.isArray(parsed.documentTemplates)) {
+      parsed.documentTemplates = [];
+      modified = true;
+    }
+    if (!Array.isArray(parsed.printHistory)) {
+      parsed.printHistory = [];
+      modified = true;
+    }
+    if (!Array.isArray(parsed.reminderTemplates)) {
+      parsed.reminderTemplates = [];
+      modified = true;
+    }
+
+    if (Array.isArray(parsed.reminders)) {
+      parsed.reminders = parsed.reminders.map((reminder, index) => {
+        const assignedTo = reminder.assignedTo || reminder.responsibleUserId || "all";
+        const responsibleUserId = reminder.responsibleUserId || (assignedTo !== "all" ? assignedTo : undefined);
+        const normalizedSchedule = Array.isArray(reminder.notificationSchedule) && reminder.notificationSchedule.length > 0
+          ? [...new Set(reminder.notificationSchedule.map((value: unknown) => Number(value)).filter((value: number) => Number.isFinite(value) && value >= 0))]
+          : defaultReminderSchedule;
+        const normalizedPriority: ReminderPriority =
+          reminder.priority === "Low" || reminder.priority === "Medium" || reminder.priority === "High" || reminder.priority === "Critical"
+            ? reminder.priority
+            : "Medium";
+        const normalizedCategory = typeof reminder.category === "string" ? reminder.category : "Custom Reminder";
+        const normalizedDescription = reminder.description ?? reminder.notes ?? "";
+        const normalizedNotes = reminder.notes ?? reminder.description ?? "";
+        const normalizedStatus = reminder.status === "Completed" || reminder.status === "Snoozed" || reminder.status === "Cancelled"
+          ? reminder.status
+          : "Active";
+        const normalizedDueDate = typeof reminder.dueDate === "string" && reminder.dueDate ? reminder.dueDate : new Date().toISOString().split("T")[0];
+        const normalizedTemplateId = typeof reminder.templateId === "string" ? reminder.templateId : undefined;
+        const normalizedCreatedBy = typeof reminder.createdBy === "string" ? reminder.createdBy : defaultUsers[0].id;
+        const normalizedCreatedByName = typeof reminder.createdByName === "string" ? reminder.createdByName : defaultUsers[0].name;
+        const normalizedDepartmentId = typeof reminder.departmentId === "string" ? reminder.departmentId : undefined;
+        const normalizedClientId = typeof reminder.clientId === "string" ? reminder.clientId : undefined;
+        const normalizedNotification = normalizedSchedule.length > 0 ? normalizedSchedule : defaultReminderSchedule;
+        const normalized = {
+          ...reminder,
+          assignedTo,
+          responsibleUserId,
+          priority: normalizedPriority,
+          category: normalizedCategory,
+          description: normalizedDescription,
+          notes: normalizedNotes,
+          status: normalizedStatus,
+          dueDate: normalizedDueDate,
+          templateId: normalizedTemplateId,
+          createdBy: normalizedCreatedBy,
+          createdByName: normalizedCreatedByName,
+          departmentId: normalizedDepartmentId,
+          clientId: normalizedClientId,
+          notificationSchedule: normalizedNotification,
+          updatedAt: reminder.updatedAt || reminder.createdAt || new Date().toISOString()
+        };
+        if (
+          normalized.assignedTo !== reminder.assignedTo ||
+          normalized.responsibleUserId !== reminder.responsibleUserId ||
+          normalized.priority !== reminder.priority ||
+          normalized.category !== reminder.category ||
+          normalized.description !== reminder.description ||
+          normalized.notes !== reminder.notes ||
+          normalized.status !== reminder.status ||
+          normalized.dueDate !== reminder.dueDate ||
+          normalized.templateId !== reminder.templateId ||
+          normalized.createdBy !== reminder.createdBy ||
+          normalized.createdByName !== reminder.createdByName ||
+          normalized.departmentId !== reminder.departmentId ||
+          normalized.clientId !== reminder.clientId ||
+          JSON.stringify(normalized.notificationSchedule) !== JSON.stringify(reminder.notificationSchedule)
+        ) {
+          modified = true;
+        }
+        return normalized;
+      });
+    }
 
     parsed.users.forEach(user => {
       const existingPref = parsed.notificationPreferences.find(pref => pref.userId === user.id);
@@ -889,6 +988,7 @@ export interface DatabaseIntegrityResult {
     reminders: number;
     notifications: number;
     auditLogs: number;
+    documents: number;
   };
 }
 
@@ -925,8 +1025,12 @@ export function validateDatabaseIntegrity(state: DBState): DatabaseIntegrityResu
     ["disposals", "disposals"],
     ["auditLogs", "auditLogs"],
     ["reminders", "reminders"],
+    ["reminderTemplates", "reminderTemplates"],
     ["notifications", "notifications"],
-    ["notificationPreferences", "notificationPreferences"]
+    ["notificationPreferences", "notificationPreferences"],
+    ["documents", "documents"],
+    ["documentTemplates", "documentTemplates"],
+    ["printHistory", "printHistory"]
   ];
 
   collections.forEach(([key, label]) => {
@@ -950,7 +1054,11 @@ export function validateDatabaseIntegrity(state: DBState): DatabaseIntegrityResu
     collectDuplicateIds(state.disposals, "disposals", errors);
     collectDuplicateIds(state.auditLogs, "auditLogs", errors);
     collectDuplicateIds(state.reminders, "reminders", errors);
+    collectDuplicateIds(state.reminderTemplates, "reminderTemplates", errors);
     collectDuplicateIds(state.notifications, "notifications", errors);
+    collectDuplicateIds(state.documents, "documents", errors);
+    collectDuplicateIds(state.documentTemplates, "documentTemplates", errors);
+    collectDuplicateIds(state.printHistory, "printHistory", errors);
 
     state.assets.forEach(asset => {
       if (!state.categories.some(item => item.id === asset.categoryId)) warnings.push(`Asset ${asset.assetTag} references missing category ${asset.categoryId}.`);
@@ -992,13 +1100,578 @@ export function validateDatabaseIntegrity(state: DBState): DatabaseIntegrityResu
       assets: Array.isArray(state.assets) ? state.assets.length : 0,
       reminders: Array.isArray(state.reminders) ? state.reminders.length : 0,
       notifications: Array.isArray(state.notifications) ? state.notifications.length : 0,
-      auditLogs: Array.isArray(state.auditLogs) ? state.auditLogs.length : 0
+      auditLogs: Array.isArray(state.auditLogs) ? state.auditLogs.length : 0,
+      documents: Array.isArray(state.documents) ? state.documents.length : 0
     }
   };
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function stripHtml(value: string): string {
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function makeDocumentId(prefix: string, sourceType: string, sourceId: string): string {
+  return `doc-${prefix}-${sourceType}-${sourceId}`.replace(/[^a-zA-Z0-9_-]/g, "-");
+}
+
+function makeReceiptNumber(prefix: string, sourceId: string): string {
+  const stamp = sourceId.replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase() || "000000";
+  return `${prefix}-${stamp}-${Date.now().toString().slice(-6)}`;
+}
+
+function buildBrandBlock(settings: SystemSettings, title: string, subtitle: string, receiptNumber?: string): string {
+  const logo = settings.logo || "FA";
+  return `
+    <div class="brand-bar">
+      <div class="brand-mark">${escapeHtml(logo)}</div>
+      <div class="brand-copy">
+        <div class="org-name">${escapeHtml(settings.orgName || "FAIMS Malawi Asset Management System")}</div>
+        <div class="org-meta">${escapeHtml(settings.orgAddress || "")}</div>
+        <div class="org-meta">${escapeHtml(settings.orgPhone || "")} ${settings.orgEmail ? ` | ${escapeHtml(settings.orgEmail)}` : ""}</div>
+      </div>
+      <div class="brand-right">
+        <div class="doc-title">${escapeHtml(title)}</div>
+        <div class="doc-subtitle">${escapeHtml(subtitle)}</div>
+        ${receiptNumber ? `<div class="doc-chip">Receipt #${escapeHtml(receiptNumber)}</div>` : ""}
+      </div>
+    </div>`;
+}
+
+function buildDocHtml(title: string, subtitle: string, bodyBlocks: string[], settings: SystemSettings, receiptNumber?: string, watermark?: string): string {
+  const safeWatermark = watermark ? `<div class="watermark">${escapeHtml(watermark)}</div>` : "";
+  return `
+    <div class="doc-shell">
+      ${safeWatermark}
+      ${buildBrandBlock(settings, title, subtitle, receiptNumber)}
+      <div class="doc-body">
+        ${bodyBlocks.join("")}
+      </div>
+      <div class="doc-footer">
+        <span>${escapeHtml(settings.orgFooterText || "")}</span>
+        <span>Printed ${escapeHtml(new Date().toLocaleString())}</span>
+      </div>
+    </div>`;
+}
+
+function rowList(items: Array<{ label: string; value: string }>): string {
+  return `<div class="field-grid">${items.map(item => `<div class="field"><span>${escapeHtml(item.label)}</span><strong>${escapeHtml(item.value || "-")}</strong></div>`).join("")}</div>`;
+}
+
+function tableMarkup(headers: string[], rows: string[][]): string {
+  return `
+    <table class="doc-table">
+      <thead><tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>
+      <tbody>
+        ${rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function docFingerprint(payload: unknown): string {
+  return JSON.stringify(payload);
+}
+
+function upsertDocument(state: DBState, doc: DocumentRecord): boolean {
+  const idx = state.documents.findIndex(item => item.id === doc.id);
+  if (idx === -1) {
+    state.documents.unshift(doc);
+    return true;
+  }
+
+  const current = state.documents[idx];
+  const shouldUpdate =
+    current.sourceFingerprint !== doc.sourceFingerprint ||
+    current.htmlContent !== doc.htmlContent ||
+    current.title !== doc.title ||
+    current.description !== doc.description ||
+    current.amount !== doc.amount ||
+    current.currency !== doc.currency ||
+    current.paymentMethod !== doc.paymentMethod ||
+    current.scope !== doc.scope ||
+    current.departmentId !== doc.departmentId ||
+    current.clientId !== doc.clientId ||
+    current.assetId !== doc.assetId;
+
+  if (!shouldUpdate) return false;
+
+  state.documents[idx] = {
+    ...current,
+    ...doc,
+    createdAt: current.createdAt,
+    createdBy: current.createdBy,
+    createdByName: current.createdByName,
+    receiptNumber: current.receiptNumber || doc.receiptNumber,
+    version: current.version + 1,
+    signatures: current.signatures,
+    approvalStatus: current.approvalStatus === "Archived" ? "Archived" : current.approvalStatus,
+    printCount: current.printCount,
+    lastPrintedAt: current.lastPrintedAt,
+    archived: current.archived
+  };
+  return true;
+}
+
+function syncGeneratedDocuments(state: DBState): boolean {
+  let modified = false;
+  const settings = state.settings || defaultSettings;
+  const defaultAuthor = state.users[0];
+  const authorId = defaultAuthor?.id || "system";
+  const authorName = defaultAuthor?.name || settings.orgName || "FAIMS";
+  const currency = settings.currency || "MWK";
+
+  state.documents = Array.isArray(state.documents) ? state.documents : [];
+  state.documentTemplates = Array.isArray(state.documentTemplates) ? state.documentTemplates : [];
+  state.printHistory = Array.isArray(state.printHistory) ? state.printHistory : [];
+
+  state.assets.forEach(asset => {
+    const client = asset.clientId ? state.clients.find(item => item.id === asset.clientId) : undefined;
+    const dept = state.departments.find(item => item.id === asset.departmentId);
+    const location = state.locations.find(item => item.id === asset.locationId);
+    const supplier = state.suppliers.find(item => item.id === asset.supplierId);
+    const sourceFingerprint = docFingerprint({
+      asset,
+      client,
+      dept,
+      location,
+      supplier,
+      settings: { orgName: settings.orgName, logo: settings.logo, currency, dateFormat: settings.dateFormat, timezone: settings.timezone }
+    });
+    const receiptNumber = makeReceiptNumber("PUR", asset.id);
+    modified = upsertDocument(state, {
+      id: makeDocumentId("purchase", "asset", asset.id),
+      docType: "Asset Purchase Receipt",
+      title: `Asset Purchase Receipt - ${asset.assetTag}`,
+      description: `Purchase receipt for ${asset.name}`,
+      htmlContent: buildDocHtml(
+        `Asset Purchase Receipt`,
+        `${asset.assetTag} • ${asset.name}`,
+        [
+          rowList([
+            { label: "Asset Tag", value: asset.assetTag },
+            { label: "Asset Name", value: asset.name },
+            { label: "Category", value: state.categories.find(item => item.id === asset.categoryId)?.name || "-" },
+            { label: "Department", value: dept?.name || "-" },
+            { label: "Location", value: location?.name || "-" },
+            { label: "Supplier", value: supplier?.name || "-" },
+            { label: "Client", value: client?.name || "-" },
+            { label: "Purchase Date", value: formatDate(asset.purchaseDate) },
+            { label: "Amount", value: formatCurrency(asset.purchaseCost) },
+            { label: "Currency", value: currency },
+            { label: "Generated", value: new Date().toISOString() }
+          ]),
+          `<div class="doc-note">This receipt is generated from live asset master data and may be re-issued when asset records are updated.</div>`,
+          `<div class="doc-qr">QR: ${escapeHtml(asset.assetTag)}</div>`
+        ],
+        settings,
+        receiptNumber,
+        "LIVE RECEIPT"
+      ),
+      plainText: stripHtml(asset.name),
+      scope: client ? "client" : "asset",
+      sourceType: "asset",
+      sourceId: asset.id,
+      sourceFingerprint,
+      version: 1,
+      approvalStatus: "Approved",
+      createdBy: authorId,
+      createdByName: authorName,
+      modifiedBy: authorId,
+      modifiedByName: authorName,
+      createdAt: asset.purchaseDate || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      archived: false,
+      isAutoGenerated: true,
+      receiptNumber,
+      amount: asset.purchaseCost,
+      currency,
+      paymentMethod: "Purchase Order",
+      clientId: asset.clientId,
+      assetId: asset.id,
+      departmentId: asset.departmentId,
+      tags: ["receipt", "purchase", "asset"],
+      attachments: [],
+      signatures: [],
+      printCount: 0,
+      qrPayload: asset.assetTag
+    }) || modified;
+  });
+
+  state.assignments.forEach(assignment => {
+    const asset = state.assets.find(item => item.id === assignment.assetId);
+    const user = state.users.find(item => item.id === assignment.userId);
+    const dept = state.departments.find(item => item.id === assignment.departmentId);
+    const sourceFingerprint = docFingerprint({ assignment, asset, user, dept, settings: { orgName: settings.orgName, logo: settings.logo } });
+    modified = upsertDocument(state, {
+      id: makeDocumentId("handover", "assignment", assignment.id),
+      docType: "Asset Handover Form",
+      title: `Asset Handover Form - ${asset?.assetTag || assignment.assetId}`,
+      description: `Handover form for ${asset?.name || assignment.assetId}`,
+      htmlContent: buildDocHtml(
+        "Asset Handover Form",
+        asset?.assetTag || assignment.id,
+        [
+          rowList([
+            { label: "Asset", value: asset?.name || assignment.assetId },
+            { label: "Assigned User", value: user?.name || assignment.userId },
+            { label: "Department", value: dept?.name || assignment.departmentId },
+            { label: "Assigned Date", value: formatDate(assignment.assignedDate) },
+            { label: "Status", value: assignment.status },
+            { label: "Remarks", value: assignment.remarks || "-" }
+          ]),
+          `<div class="doc-signature-line">Authorized by operations and acknowledged by the recipient.</div>`
+        ],
+        settings,
+        undefined,
+        "HANDOVER"
+      ),
+      plainText: stripHtml(asset?.name || assignment.id),
+      scope: user ? "personal" : "department",
+      sourceType: "assignment",
+      sourceId: assignment.id,
+      sourceFingerprint,
+      version: 1,
+      approvalStatus: assignment.status === "Returned" ? "Approved" : "Pending Approval",
+      createdBy: authorId,
+      createdByName: authorName,
+      modifiedBy: authorId,
+      modifiedByName: authorName,
+      createdAt: assignment.assignedDate,
+      updatedAt: new Date().toISOString(),
+      archived: false,
+      isAutoGenerated: true,
+      clientId: asset?.clientId,
+      assetId: asset?.id,
+      departmentId: assignment.departmentId,
+      tags: ["handover", "assignment", "asset"],
+      attachments: [],
+      signatures: [],
+      printCount: 0
+    }) || modified;
+
+    if (assignment.status === "Returned" && assignment.returnDate) {
+      const returnFingerprint = docFingerprint({ assignment, asset, user, dept, settings: { orgName: settings.orgName, logo: settings.logo } });
+      modified = upsertDocument(state, {
+        id: makeDocumentId("return", "assignment", assignment.id),
+        docType: "Asset Return Form",
+        title: `Asset Return Form - ${asset?.assetTag || assignment.assetId}`,
+        description: `Return form for ${asset?.name || assignment.assetId}`,
+        htmlContent: buildDocHtml(
+          "Asset Return Form",
+          asset?.assetTag || assignment.id,
+          [rowList([
+            { label: "Asset", value: asset?.name || assignment.assetId },
+            { label: "Returned By", value: user?.name || assignment.userId },
+            { label: "Return Date", value: formatDate(assignment.returnDate) },
+            { label: "Department", value: dept?.name || assignment.departmentId },
+            { label: "Status", value: assignment.status }
+          ])],
+          settings,
+          undefined,
+          "RETURN"
+        ),
+        plainText: stripHtml(asset?.name || assignment.id),
+        scope: user ? "personal" : "department",
+        sourceType: "assignment-return",
+        sourceId: assignment.id,
+        sourceFingerprint: returnFingerprint,
+        version: 1,
+        approvalStatus: "Approved",
+        createdBy: authorId,
+        createdByName: authorName,
+        modifiedBy: authorId,
+        modifiedByName: authorName,
+        createdAt: assignment.returnDate,
+        updatedAt: new Date().toISOString(),
+        archived: false,
+        isAutoGenerated: true,
+        clientId: asset?.clientId,
+        assetId: asset?.id,
+        departmentId: assignment.departmentId,
+        tags: ["return", "assignment", "asset"],
+        attachments: [],
+        signatures: [],
+        printCount: 0
+      }) || modified;
+    }
+  });
+
+  state.transfers.forEach(transfer => {
+    const asset = state.assets.find(item => item.id === transfer.assetId);
+    const sourceDept = state.departments.find(item => item.id === transfer.sourceDepartmentId);
+    const destDept = state.departments.find(item => item.id === transfer.destDepartmentId);
+    const sourceLoc = state.locations.find(item => item.id === transfer.sourceLocationId);
+    const destLoc = state.locations.find(item => item.id === transfer.destLocationId);
+    const sourceFingerprint = docFingerprint({ transfer, asset, sourceDept, destDept, sourceLoc, destLoc, settings: { orgName: settings.orgName, logo: settings.logo } });
+    modified = upsertDocument(state, {
+      id: makeDocumentId("transfer", "movement", transfer.id),
+      docType: "Asset Transfer Form",
+      title: `Asset Transfer Form - ${asset?.assetTag || transfer.assetId}`,
+      description: `Transfer form for ${asset?.name || transfer.assetId}`,
+      htmlContent: buildDocHtml(
+        "Asset Transfer Form",
+        asset?.assetTag || transfer.id,
+        [rowList([
+          { label: "Asset", value: asset?.name || transfer.assetId },
+          { label: "From Department", value: sourceDept?.name || transfer.sourceDepartmentId },
+          { label: "To Department", value: destDept?.name || transfer.destDepartmentId },
+          { label: "From Location", value: sourceLoc?.name || transfer.sourceLocationId },
+          { label: "To Location", value: destLoc?.name || transfer.destLocationId },
+          { label: "Status", value: transfer.status },
+          { label: "Authorized By", value: transfer.authorizedBy || "-" },
+          { label: "Date", value: formatDate(transfer.transferDate) },
+          { label: "Remarks", value: transfer.remarks || "-" }
+        ])],
+        settings,
+        undefined,
+        "TRANSFER"
+      ),
+      plainText: stripHtml(asset?.name || transfer.id),
+      scope: "department",
+      sourceType: "transfer",
+      sourceId: transfer.id,
+      sourceFingerprint,
+      version: 1,
+      approvalStatus: transfer.status === TransferStatus.APPROVED ? "Approved" : "Pending Approval",
+      createdBy: authorId,
+      createdByName: authorName,
+      modifiedBy: authorId,
+      modifiedByName: authorName,
+      createdAt: transfer.transferDate,
+      updatedAt: new Date().toISOString(),
+      archived: false,
+      isAutoGenerated: true,
+      clientId: asset?.clientId,
+      assetId: asset?.id,
+      departmentId: transfer.destDepartmentId,
+      tags: ["transfer", "asset"],
+      attachments: [],
+      signatures: [],
+      printCount: 0
+    }) || modified;
+  });
+
+  state.maintenance.forEach(record => {
+    const asset = state.assets.find(item => item.id === record.assetId);
+    const sourceFingerprint = docFingerprint({ record, asset, settings: { orgName: settings.orgName, logo: settings.logo, currency } });
+    modified = upsertDocument(state, {
+      id: makeDocumentId("maintenance", "record", record.id),
+      docType: "Maintenance Report",
+      title: `Maintenance Report - ${asset?.assetTag || record.assetId}`,
+      description: `Maintenance report for ${asset?.name || record.assetId}`,
+      htmlContent: buildDocHtml(
+        "Maintenance Report",
+        asset?.assetTag || record.id,
+        [rowList([
+          { label: "Asset", value: asset?.name || record.assetId },
+          { label: "Request By", value: record.requestBy },
+          { label: "Technician", value: record.technician || "-" },
+          { label: "Service Provider", value: record.serviceProvider || "-" },
+          { label: "Cost", value: formatCurrency(record.cost) },
+          { label: "Date", value: formatDate(record.maintenanceDate) },
+          { label: "Completion", value: record.completionDate ? formatDate(record.completionDate) : "Pending" },
+          { label: "Status", value: record.status },
+          { label: "Notes", value: record.notes || "-" }
+        ])],
+        settings,
+        undefined,
+        "MAINTENANCE"
+      ),
+      plainText: stripHtml(asset?.name || record.id),
+      scope: "department",
+      sourceType: "maintenance",
+      sourceId: record.id,
+      sourceFingerprint,
+      version: 1,
+      approvalStatus: record.status === "Completed" ? "Approved" : "Pending Approval",
+      createdBy: authorId,
+      createdByName: authorName,
+      modifiedBy: authorId,
+      modifiedByName: authorName,
+      createdAt: record.maintenanceDate,
+      updatedAt: new Date().toISOString(),
+      archived: false,
+      isAutoGenerated: true,
+      amount: record.cost,
+      currency,
+      paymentMethod: record.serviceProvider || "Maintenance Service",
+      clientId: asset?.clientId,
+      assetId: asset?.id,
+      departmentId: asset?.departmentId,
+      tags: ["maintenance", "report"],
+      attachments: [],
+      signatures: [],
+      printCount: 0
+    }) || modified;
+
+    if (record.cost > 0) {
+      const receiptFingerprint = docFingerprint({ record, asset, settings: { orgName: settings.orgName, logo: settings.logo, currency } });
+      const receiptNumber = makeReceiptNumber("MNT", record.id);
+      modified = upsertDocument(state, {
+        id: makeDocumentId("maintenance-receipt", "record", record.id),
+        docType: "Maintenance Payment Receipt",
+        title: `Maintenance Payment Receipt - ${asset?.assetTag || record.assetId}`,
+        description: `Payment receipt for maintenance on ${asset?.name || record.assetId}`,
+        htmlContent: buildDocHtml(
+          "Maintenance Payment Receipt",
+          asset?.assetTag || record.id,
+          [rowList([
+            { label: "Asset", value: asset?.name || record.assetId },
+            { label: "Amount", value: formatCurrency(record.cost) },
+            { label: "Currency", value: currency },
+            { label: "Payment Method", value: record.serviceProvider || "Cash/Bank" },
+            { label: "Printed Timestamp", value: new Date().toISOString() }
+          ])],
+          settings,
+          receiptNumber,
+          "RECEIPT"
+        ),
+        plainText: stripHtml(asset?.name || record.id),
+        scope: "department",
+        sourceType: "maintenance-receipt",
+        sourceId: record.id,
+        sourceFingerprint: receiptFingerprint,
+        version: 1,
+        approvalStatus: "Approved",
+        createdBy: authorId,
+        createdByName: authorName,
+        modifiedBy: authorId,
+        modifiedByName: authorName,
+        createdAt: record.completionDate || record.maintenanceDate,
+        updatedAt: new Date().toISOString(),
+        archived: false,
+        isAutoGenerated: true,
+        receiptNumber,
+        amount: record.cost,
+        currency,
+        paymentMethod: record.serviceProvider || "Maintenance Service",
+        clientId: asset?.clientId,
+        assetId: asset?.id,
+        departmentId: asset?.departmentId,
+        tags: ["receipt", "maintenance"],
+        attachments: [],
+        signatures: [],
+        printCount: 0,
+        qrPayload: `${asset?.assetTag || record.assetId}:${record.id}`
+      }) || modified;
+    }
+  });
+
+  state.verifications.forEach(record => {
+    const asset = state.assets.find(item => item.id === record.assetId);
+    const sourceFingerprint = docFingerprint({ record, asset, settings: { orgName: settings.orgName, logo: settings.logo } });
+    modified = upsertDocument(state, {
+      id: makeDocumentId("verification", "record", record.id),
+      docType: "Verification Report",
+      title: `Verification Report - ${asset?.assetTag || record.assetId}`,
+      description: `Verification report for ${asset?.name || record.assetId}`,
+      htmlContent: buildDocHtml(
+        "Verification Report",
+        asset?.assetTag || record.id,
+        [rowList([
+          { label: "Asset", value: asset?.name || record.assetId },
+          { label: "Verified By", value: record.verifiedBy },
+          { label: "Verification Date", value: formatDate(record.verificationDate) },
+          { label: "Status", value: record.status },
+          { label: "Condition", value: record.condition },
+          { label: "Result", value: record.result },
+          { label: "Notes", value: record.notes || "-" }
+        ])],
+        settings,
+        undefined,
+        "VERIFICATION"
+      ),
+      plainText: stripHtml(asset?.name || record.id),
+      scope: "department",
+      sourceType: "verification",
+      sourceId: record.id,
+      sourceFingerprint,
+      version: 1,
+      approvalStatus: "Approved",
+      createdBy: authorId,
+      createdByName: authorName,
+      modifiedBy: authorId,
+      modifiedByName: authorName,
+      createdAt: record.verificationDate,
+      updatedAt: new Date().toISOString(),
+      archived: false,
+      isAutoGenerated: true,
+      clientId: asset?.clientId,
+      assetId: asset?.id,
+      departmentId: asset?.departmentId,
+      tags: ["verification", "report"],
+      attachments: [],
+      signatures: [],
+      printCount: 0
+    }) || modified;
+  });
+
+  state.disposals.forEach(record => {
+    const asset = state.assets.find(item => item.id === record.assetId);
+    const sourceFingerprint = docFingerprint({ record, asset, settings: { orgName: settings.orgName, logo: settings.logo } });
+    modified = upsertDocument(state, {
+      id: makeDocumentId("disposal", "record", record.id),
+      docType: "Disposal Certificate",
+      title: `Disposal Certificate - ${asset?.assetTag || record.assetId}`,
+      description: `Disposal certificate for ${asset?.name || record.assetId}`,
+      htmlContent: buildDocHtml(
+        "Disposal Certificate",
+        asset?.assetTag || record.id,
+        [rowList([
+          { label: "Asset", value: asset?.name || record.assetId },
+          { label: "Disposal Date", value: formatDate(record.disposalDate) },
+          { label: "Method", value: record.method },
+          { label: "Reason", value: record.reason },
+          { label: "Authorized By", value: record.authorizedBy },
+          { label: "Supporting Docs", value: record.supportingDocuments || "-" }
+        ])],
+        settings,
+        undefined,
+        "DISPOSAL"
+      ),
+      plainText: stripHtml(asset?.name || record.id),
+      scope: "department",
+      sourceType: "disposal",
+      sourceId: record.id,
+      sourceFingerprint,
+      version: 1,
+      approvalStatus: "Approved",
+      createdBy: authorId,
+      createdByName: authorName,
+      modifiedBy: authorId,
+      modifiedByName: authorName,
+      createdAt: record.disposalDate,
+      updatedAt: new Date().toISOString(),
+      archived: false,
+      isAutoGenerated: true,
+      clientId: asset?.clientId,
+      assetId: asset?.id,
+      departmentId: asset?.departmentId,
+      tags: ["disposal", "certificate"],
+      attachments: [],
+      signatures: [],
+      printCount: 0
+    }) || modified;
+  });
+
+  return modified;
+}
+
 export function saveDatabaseState(state: DBState): void {
   memoryDatabaseState = state;
+  syncGeneratedDocuments(state);
   // Run integrity validation for observability — but NEVER throw.
   // Throwing here propagates through runReminderEngine/useEffect and crashes the React tree.
   const integrity = validateDatabaseIntegrity(state);
@@ -1113,21 +1786,35 @@ function uniqueId(prefix: string): string {
 }
 
 function notificationRecipients(reminder: Reminder, db: DBState): string[] {
-  if (!reminder.assignedTo || reminder.assignedTo === "all") return ["all"];
-  const userExists = db.users.some(user => user.id === reminder.assignedTo);
-  return userExists ? [reminder.assignedTo] : ["all"];
+  if (reminder.responsibleUserId) {
+    const userExists = db.users.some(user => user.id === reminder.responsibleUserId);
+    if (userExists) return [reminder.responsibleUserId];
+  }
+  if (reminder.assignedTo && reminder.assignedTo !== "all") {
+    const userExists = db.users.some(user => user.id === reminder.assignedTo);
+    if (userExists) return [reminder.assignedTo];
+  }
+  if (reminder.responsibleRole) {
+    const usersByRole = db.users.filter(user => user.role === reminder.responsibleRole).map(user => user.id);
+    if (usersByRole.length > 0) return usersByRole;
+  }
+  return ["all"];
 }
 
 function buildReminderMessage(reminder: Reminder, dayDelta: number): string {
   const due = formatDate(reminder.dueDate);
   const amount = reminder.amount ? ` Amount: ${formatCurrency(reminder.amount)}.` : "";
+  const priority = reminder.priority ? ` Priority: ${reminder.priority}.` : "";
+  const target = (reminder.responsibleRole || reminder.assignedTo !== "all")
+    ? ` Assigned to ${reminder.responsibleRole || reminder.assignedTo}.`
+    : "";
   if (dayDelta < 0) {
-    return `${reminder.title} is overdue by ${Math.abs(dayDelta)} day${Math.abs(dayDelta) === 1 ? "" : "s"} (due ${due}).${amount}`;
+    return `${reminder.title} is overdue by ${Math.abs(dayDelta)} day${Math.abs(dayDelta) === 1 ? "" : "s"} (due ${due}).${priority}${target}${amount}`;
   }
   if (dayDelta === 0) {
-    return `${reminder.title} is due today (${due}).${amount}`;
+    return `${reminder.title} is due today (${due}).${priority}${target}${amount}`;
   }
-  return `${reminder.title} is due in ${dayDelta} day${dayDelta === 1 ? "" : "s"} (${due}).${amount}`;
+  return `${reminder.title} is due in ${dayDelta} day${dayDelta === 1 ? "" : "s"} (${due}).${priority}${target}${amount}`;
 }
 
 export function runReminderEngine(now = new Date()): { notificationsCreated: number; recurrencesCreated: number } {
@@ -1136,7 +1823,7 @@ export function runReminderEngine(now = new Date()): { notificationsCreated: num
     return { notificationsCreated: 0, recurrencesCreated: 0 };
   }
 
-  const intervals = [...new Set(db.settings.reminderIntervals || [30, 14, 7, 3, 1, 0])]
+  const intervals = [...new Set(db.settings.reminderIntervals || defaultReminderSchedule)]
     .filter(value => Number.isFinite(value) && value >= 0)
     .sort((a, b) => b - a);
   let notificationsCreated = 0;
@@ -1188,7 +1875,10 @@ export function runReminderEngine(now = new Date()): { notificationsCreated: num
       if (snoozedUntil && toLocalDateOnly(now).getTime() < snoozedUntil.getTime()) return;
     }
 
-    const shouldNotify = dayDelta < 0 || intervals.includes(dayDelta);
+    const reminderIntervals = [...new Set((reminder.notificationSchedule && reminder.notificationSchedule.length > 0 ? reminder.notificationSchedule : intervals))]
+      .filter(value => Number.isFinite(value) && value >= 0)
+      .sort((a, b) => b - a);
+    const shouldNotify = dayDelta < 0 || reminderIntervals.includes(dayDelta);
     if (!shouldNotify) return;
 
     notificationRecipients(reminder, db).forEach(userId => {
