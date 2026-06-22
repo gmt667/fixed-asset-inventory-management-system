@@ -1134,9 +1134,14 @@ function makeReceiptNumber(prefix: string, sourceId: string): string {
 
 function buildBrandBlock(settings: SystemSettings, title: string, subtitle: string, receiptNumber?: string): string {
   const logo = settings.logo || "FA";
+  const isImageLogo = logo.startsWith("data:image/") || logo.startsWith("http://") || logo.startsWith("https://") || logo.startsWith("blob:");
+  const logoHtml = isImageLogo
+    ? `<img src="${logo}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: inherit; display: block;" />`
+    : escapeHtml(logo);
+
   return `
     <div class="brand-bar">
-      <div class="brand-mark">${escapeHtml(logo)}</div>
+      <div class="brand-mark" style="${isImageLogo ? "background: transparent; border: none; display: flex; align-items: center; justify-content: center; overflow: hidden;" : ""}">${logoHtml}</div>
       <div class="brand-copy">
         <div class="org-name">${escapeHtml(settings.orgName || "FAIMS Malawi Asset Management System")}</div>
         <div class="org-meta">${escapeHtml(settings.orgAddress || "")}</div>

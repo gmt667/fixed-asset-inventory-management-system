@@ -324,11 +324,16 @@ function htmlToPdf(doc: jsPDF, title: string, html: string, organization: string
 }
 
 function buildDocHtml(title: string, subtitle: string, blocks: string[], organization: string, logo: string, watermark?: string): string {
+  const isImageLogo = logo.startsWith("data:image/") || logo.startsWith("http://") || logo.startsWith("https://") || logo.startsWith("blob:");
+  const logoHtml = isImageLogo
+    ? `<img src="${logo}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: inherit; display: block;" />`
+    : escapeHtml(logo);
+
   return `
     <div class="center-doc">
       ${watermark ? `<div class="doc-watermark">${escapeHtml(watermark)}</div>` : ""}
       <header class="center-doc__header">
-        <div class="center-doc__logo">${escapeHtml(logo)}</div>
+        <div class="center-doc__logo" style="${isImageLogo ? "background: transparent; border: none; overflow: hidden;" : ""}">${logoHtml}</div>
         <div class="center-doc__org">
           <h1>${escapeHtml(organization)}</h1>
           <p>${escapeHtml(subtitle)}</p>
@@ -1045,7 +1050,7 @@ export default function DocumentsPrintCenter({ userRole, currentUserId }: Docume
           body{font-family:Arial,sans-serif;padding:24px;color:#111}
           .center-doc{max-width:900px;margin:0 auto}
           .center-doc__header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:1px solid #ccc;padding-bottom:16px;margin-bottom:16px}
-          .center-doc__logo{width:54px;height:54px;border-radius:12px;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
+          .center-doc__logo{width:54px;height:54px;border-radius:12px;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}.center-doc__logo img{width:100%;height:100%;object-fit:contain;border-radius:inherit;display:block}
           .doc-table{width:100%;border-collapse:collapse}
           .doc-table th,.doc-table td{border:1px solid #ccc;padding:8px;text-align:left}
           .doc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:16px 0}
@@ -1091,6 +1096,7 @@ export default function DocumentsPrintCenter({ userRole, currentUserId }: Docume
         .doc-watermark{position:absolute;inset:auto 16px 16px auto;font-size:48px;font-weight:900;color:rgba(15,23,42,0.04);transform:rotate(-18deg);pointer-events:none}
         .center-doc__header{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:start}
         .center-doc__logo{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#0f172a,#334155);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900}
+        .center-doc__logo img{width:100%;height:100%;object-fit:contain;border-radius:inherit;display:block}
         .center-doc__org h1{margin:0;font-size:18px;color:#0f172a}
         .center-doc__org p{margin:4px 0 0;color:#64748b;font-size:12px}
         .center-doc__title span{display:inline-flex;padding:6px 10px;border-radius:999px;background:#ecfeff;color:#0f766e;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}

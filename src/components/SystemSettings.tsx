@@ -61,6 +61,39 @@ export default function SystemSettingsComponent({ userRole, currentUserId, focus
   // Form states
   const [orgName, setOrgName] = useState(db.settings.orgName);
   const [logo, setLogo] = useState(db.settings.logo);
+  const [logoText, setLogoText] = useState(() => db.settings.logo.startsWith("data:image/") ? "FA" : db.settings.logo);
+  const [logoImage, setLogoImage] = useState(() => db.settings.logo.startsWith("data:image/") ? db.settings.logo : "");
+
+  const handleLogoImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 500 * 1024) {
+      alert("Error: Logo image file is too large (maximum size is 500KB). Please upload a smaller image.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        setLogoImage(dataUrl);
+        setLogo(dataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogoImage = () => {
+    setLogoImage("");
+    setLogo(logoText);
+  };
+
+  React.useEffect(() => {
+    if (!logoImage) {
+      setLogo(logoText);
+    }
+  }, [logoText, logoImage]);
   const [emailHost, setEmailHost] = useState(db.settings.emailHost || "smtp.giantplus.local");
   const [emailPort, setEmailPort] = useState(db.settings.emailPort || "587");
   const [emailSender, setEmailSender] = useState(db.settings.emailSender || "faims-noreply@giantplus.com");
@@ -741,15 +774,55 @@ export default function SystemSettingsComponent({ userRole, currentUserId, focus
                     </div>
                   )}
                   {(!focusSection || focusSection === "CompanyLogo") && (
-                    <div className="space-y-1">
-                      <label className="font-bold text-slate-700">Logo Text Abbreviation *</label>
-                      <input
-                        type="text"
-                        required
-                        value={logo}
-                        onChange={(e) => setLogo(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-slate-808 font-medium focus:outline-none focus:border-slate-400"
-                      />
+                    <div className="space-y-4 sm:col-span-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="font-bold text-slate-700">Logo Text Abbreviation *</label>
+                          <input
+                            type="text"
+                            required
+                            value={logoText}
+                            onChange={(e) => setLogoText(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-slate-808 font-medium focus:outline-none focus:border-slate-400"
+                            placeholder="e.g. FA"
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <label className="font-bold text-slate-700">Corporate Logo Image</label>
+                          {logoImage ? (
+                            <div className="flex items-center gap-4 p-3.5 rounded-xl border border-slate-200 bg-slate-50">
+                              <div className="w-14 h-14 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden p-1 shrink-0">
+                                <img src={logoImage} alt="Logo Preview" className="w-full h-full object-contain" />
+                              </div>
+                              <div className="space-y-1">
+                                <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                                  <CheckCircle className="w-3.5 h-3.5" /> Logo Image Active
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={handleRemoveLogoImage}
+                                  className="text-[11px] text-rose-500 hover:text-rose-600 font-semibold underline cursor-pointer"
+                                >
+                                  Remove Image Logo
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:border-slate-350 transition-colors bg-slate-50 relative">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleLogoImageUpload}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              />
+                              <Upload className="w-5 h-5 text-slate-450 mx-auto mb-1" />
+                              <span className="text-[11px] font-semibold text-slate-700 block">Click or drag image file here</span>
+                              <span className="block text-[9px] text-slate-400 mt-0.5">Supports PNG, JPEG, SVG up to 500KB</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
 

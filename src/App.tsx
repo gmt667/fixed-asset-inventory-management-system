@@ -88,6 +88,18 @@ type Tab =
 export default function App() {
   const [db, setDb] = useState(() => getDatabaseState());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  const getLogoAbbrev = () => {
+    const logo = db.settings.logo || "CA";
+    if (logo.startsWith("data:image/") || logo.startsWith("http://") || logo.startsWith("https://") || logo.startsWith("blob:")) {
+      const words = (db.settings.orgName || "FAIMS").split(/\s+/);
+      if (words.length >= 2) {
+        return (words[0][0] + words[1][0]).toUpperCase();
+      }
+      return (db.settings.orgName || "FA").slice(0, 2).toUpperCase();
+    }
+    return logo;
+  };
   const [authReady, setAuthReady] = useState(false);
 
   const currentPreferences = useMemo(() => {
@@ -746,8 +758,8 @@ export default function App() {
       const sm = ws.subModules.find(m => m.id === activeSub);
       return { group: ws.name, item: sm ? sm.name : "Overview" };
     }
-    return { group: db.settings.logo || "CA", item: activeTab };
-  }, [activeTab, permittedWorkspaces, activeSubTabs, db.settings.logo]);
+    return { group: getLogoAbbrev(), item: activeTab };
+  }, [activeTab, permittedWorkspaces, activeSubTabs, db.settings.logo, db.settings.orgName]);
 
   // Keyboard Shortcuts Hook (Registered here safely after tabsList has been resolved)
   React.useEffect(() => {
@@ -1306,13 +1318,19 @@ export default function App() {
         <div className="space-y-5 flex-1 overflow-y-auto">
           {/* Brand header */}
           <div className={`flex items-center ${isCompact ? "justify-center" : "gap-3"} px-2 pb-5 border-b ${sidebarIsLight ? "border-slate-200" : "border-[#27272a]"}`}>
-            <div className={`w-8 h-8 ${bannerDotClass} rounded-lg flex items-center justify-center font-bold text-white font-display text-sm uppercase shadow-md shrink-0`}>
-              F
-            </div>
+            {db.settings.logo && (db.settings.logo.startsWith("data:image/") || db.settings.logo.startsWith("http://") || db.settings.logo.startsWith("https://") || db.settings.logo.startsWith("blob:")) ? (
+              <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-white shadow-md shrink-0 p-0.5 animate-fade-in">
+                <img src={db.settings.logo} alt="Logo" className="w-full h-full object-contain" />
+              </div>
+            ) : (
+              <div className={`w-8 h-8 ${bannerDotClass} rounded-lg flex items-center justify-center font-bold text-white font-display text-sm uppercase shadow-md shrink-0`}>
+                {getLogoAbbrev().slice(0, 2).toUpperCase()}
+              </div>
+            )}
             {!isCompact && (
               <div className="min-w-0">
                 <h2 className={`text-sm font-bold tracking-tight uppercase ${sidebarIsLight ? "text-slate-900" : "text-white"}`}>
-                  {db.settings.logo || "CA"}
+                  {getLogoAbbrev()}
                 </h2>
                 <span className="text-[10px] text-zinc-500 font-medium mt-0.5 block truncate max-w-[140px]">
                   {db.settings.orgName || "Fixed Asset Management System"}
@@ -1448,8 +1466,16 @@ export default function App() {
       <div className={`eam-mobile-drawer md:hidden flex flex-col py-6 px-4 ${isMobileNavOpen ? "open" : ""}`}>
         <div className="flex items-center justify-between mb-6 px-2">
           <div className="flex items-center gap-2.5">
-            <div className={`w-7 h-7 ${bannerDotClass} rounded-lg flex items-center justify-center font-bold text-white text-xs`}>F</div>
-            <span className="text-sm font-bold text-white uppercase tracking-tight">{db.settings.logo || "CA"}</span>
+            {db.settings.logo && (db.settings.logo.startsWith("data:image/") || db.settings.logo.startsWith("http://") || db.settings.logo.startsWith("https://") || db.settings.logo.startsWith("blob:")) ? (
+              <div className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center bg-white shadow-md p-0.5 animate-fade-in">
+                <img src={db.settings.logo} alt="Logo" className="w-full h-full object-contain" />
+              </div>
+            ) : (
+              <div className={`w-7 h-7 ${bannerDotClass} rounded-lg flex items-center justify-center font-bold text-white text-xs`}>
+                {getLogoAbbrev().slice(0, 2).toUpperCase()}
+              </div>
+            )}
+            <span className="text-sm font-bold text-white uppercase tracking-tight">{getLogoAbbrev()}</span>
           </div>
           <button onClick={() => setIsMobileNavOpen(false)} className="text-zinc-400 hover:text-white p-1 cursor-pointer">
             <X className="w-4 h-4" />
@@ -1479,7 +1505,13 @@ export default function App() {
             </button>
             {/* Breadcrumb */}
             <nav className="flex items-center gap-1.5 text-xs font-medium min-w-0" aria-label="Breadcrumb">
-              <span className={`shrink-0 hidden sm:block ${isLight ? "text-slate-400" : "text-zinc-600"}`}>{db.settings.logo || "CA"}</span>
+              {db.settings.logo && (db.settings.logo.startsWith("data:image/") || db.settings.logo.startsWith("http://") || db.settings.logo.startsWith("https://") || db.settings.logo.startsWith("blob:")) ? (
+                <div className="w-5 h-5 rounded overflow-hidden flex items-center justify-center bg-white shadow-xs shrink-0 hidden sm:block p-0.5 animate-fade-in">
+                  <img src={db.settings.logo} alt="Logo" className="w-full h-full object-contain" />
+                </div>
+              ) : (
+                <span className={`shrink-0 hidden sm:block ${isLight ? "text-slate-400" : "text-zinc-600"}`}>{getLogoAbbrev()}</span>
+              )}
               <span className={`shrink-0 hidden sm:block ${isLight ? "text-slate-300" : "text-zinc-700"}`}>/</span>
               <span className={`shrink-0 ${isLight ? "text-slate-500" : "text-zinc-400"}`}>{activeBreadcrumb.group}</span>
               <span className={`shrink-0 ${isLight ? "text-slate-300" : "text-zinc-700"}`}>/</span>
